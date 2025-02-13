@@ -185,3 +185,85 @@ def simple_cifar10(spec):
     # Rescale epsilon.
     ret_eps = torch.reshape(eps / std, (1, -1, 1, 1))
     return X, labels, data_max, data_min, ret_eps
+
+## -------------------------------------------------------------------------------------------
+# ********************* Elsa-Cybersecurity competion model definitions *********************
+## -------------------------------------------------------------------------------------------
+from sklearn.feature_extraction.text import CountVectorizer
+import json
+from zipfile import ZipFile, ZIP_DEFLATED
+import pandas as pd
+import numpy as np
+
+def my_data_loader(spec):
+    X = csr_matrix_to_tensor(get_input())
+    labels = torch.tensor(get_labels())
+
+    data_max = torch.ones(1, X.shape[1])
+    data_min = torch.zeros(1, X.shape[1])
+    eps = spec["epsilon"]
+    ret_eps = torch.full((1, X.shape[1]), eps)
+
+    #print(f"SHAPE OF DATA_MAX: {data_max.shape}")
+    #print(f"SHAPE OF DATA_MIN: {data_min.shape}")
+    #print(f"SHAPE OF RET_EPS: {ret_eps.shape}")
+
+    return X, labels, data_max, data_min, ret_eps
+    
+
+def get_input():
+    base_path = os.path.join(os.path.dirname(__file__))
+    ## This is not in the configuration file!!----
+    with open(os.path.join(base_path, "../../../elsa-cybersecurity/track_1/"+
+              "selected_features/UnivariateFS-k_best-mutual_info_classif-10000.json")) as f:
+        vocabulary = json.load(f)
+    ## -------------------------------------------
+    vectorizer = CountVectorizer(
+            input="content", lowercase=False,
+            tokenizer=lambda x: x, binary=True, token_pattern=None,
+            vocabulary=vocabulary)
+    database_path = os.path.join(base_path, '../datasets/elsa_comp')
+    features_tr = load_features(
+            os.path.join(database_path, "training_set_features.zip"))
+    return vectorizer.fit_transform(features_tr)
+
+def get_labels():
+    base_path = os.path.join(os.path.dirname(__file__))
+    database_path = os.path.join(base_path, '../datasets/elsa_comp')
+    y_tr = load_labels(
+            os.path.join(database_path, "training_set_features.zip"),
+            os.path.join(database_path, "training_set.zip"))
+    return y_tr
+
+def csr_matrix_to_tensor(csr_matrix):
+    coo_matrix = csr_matrix.tocoo()
+    values = coo_matrix.data
+    indices = np.vstack((coo_matrix.row, coo_matrix.col))
+    i = torch.LongTensor(indices)
+    v = torch.FloatTensor(values)
+    shape = coo_matrix.shape
+    return torch.sparse_coo_tensor(i, v, torch.Size(shape)).to_dense()
+
+def load_features(features_path):
+    with ZipFile(features_path, "r", ZIP_DEFLATED) as z:
+        for filename in z.namelist():
+            with z.open(filename) as fp:
+                js = json.load(fp)
+                yield [f"{k}::{v}" for k in js for v in js[k] if js[k]]
+
+def load_labels(features_path, ds_data_path, i=1):
+    if ds_data_path.endswith(".json"):
+        with open(ds_data_path, "r") as f:
+            labels_json = {k: v for k, v in json.load(f)[i].items()}
+    else:
+        with ZipFile(ds_data_path, "r", ZIP_DEFLATED) as z:
+            ds_csv = pd.concat(
+                [pd.read_csv(z.open(f))[["sha256", "label"]]
+                 for f in z.namelist()], ignore_index=True)
+            labels_json = {k: v for k, v in zip(ds_csv.sha256.values,
+                                                ds_csv.label.values)}
+
+    with ZipFile(features_path, "r", ZIP_DEFLATED) as z:
+        labels = [labels_json[f.split(".json")[0].lower()]
+                  for f in z.namelist()]
+    return np.array(labels)

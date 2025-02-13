@@ -1,0 +1,27 @@
+# Example for using customized model and data loader.
+# Model and data loader defined in custom_model_data.py
+# python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
+general:
+  device: cpu
+  save_output: false
+model:
+  # Model is defined as simple_conv_model() in custom_model_data.py. The function simple_conv_model() will be called with arguments in_channel=3, out_dim=10.
+  name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=10000, hidden_size=10, layers=2)
+  # Path to model checkpoint.
+  path: models/elsa_comp/FFNN_normal_small_CEL0109__UnivariateFS-k_best-mutual_info_classif-10000_classifier.pth
+data:
+  # Use the cifar10() loader in "custom_model_data.py".
+  dataset: Customized("custom_model_data", "my_data_loader")
+  mean: [0.4914, 0.4822, 0.4465]
+  std: [0.2023, 0.1994, 0.201]
+  num_outputs: 2  # Number of classes for classification problem.
+specification:
+  epsilon: 0.00784313725  # 2./255.
+attack:
+  pgd_restarts: 100
+solver:
+  batch_size: 2048
+  beta-crown:
+    iteration: 20
+bab:
+  timeout: 300
