@@ -21,9 +21,9 @@ class abCrown_Oracle(BaseOracle):
         verified_status = self.oracle.run_abCrown(input, vnnlib)
         print(f"verified_status by the oracle: {verified_status}")
         if "unsafe" in verified_status:
-            return False
-        else:
             return True
+        else:
+            return False
         
     def get_vnnlib(self, feature_set, fixed_features, input_trans):
         #print(f"input_trans: {input_trans.shape}")

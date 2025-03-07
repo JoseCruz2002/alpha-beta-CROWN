@@ -1,4 +1,4 @@
-conda activate android
+conda activate alpha-beta-crown
 export PYTHONPATH="${PYTHONPATH}:complete_verifier"
 echo ${PYTHONPATH}
 
