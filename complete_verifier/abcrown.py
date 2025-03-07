@@ -630,10 +630,12 @@ class ABCROWN:
         # FIXME attack and initial_incomplete_verification only works for
         # assert len(vnnlib) == 1
         if isinstance(vnnlib[0][0], dict):
+            print("went first branch")
             x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
             data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
             data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
         else:
+            print("went second branch")
             x_range = torch.tensor(vnnlib[0][0])
             data_min = x_range.select(-1, 0).reshape(vnnlib_shape)
             data_max = x_range.select(-1, 1).reshape(vnnlib_shape)

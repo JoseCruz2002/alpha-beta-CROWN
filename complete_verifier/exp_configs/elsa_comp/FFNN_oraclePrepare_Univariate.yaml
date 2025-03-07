@@ -19,11 +19,11 @@ specification:
   # Element-wise perturbation.
   type: box
   norm: 1
-  epsilon: 0.00784313725  # 2./255.
+  epsilon: 1  # 2./255.
   selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/UnivariateFS-k_best-mutual_info_classif-10000.json
 attack:
   pgd_restarts: 100
-  pgd_order: before
+  pgd_order: skip
   #pgd_alpha: auto  # Step size of PGD attack. Default (auto) is epsilon/4.
   #pgd_alpha_scale: true??  # Scale PGD alpha according to data_max-data_min.
 solver:

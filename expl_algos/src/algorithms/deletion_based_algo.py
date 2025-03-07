@@ -30,12 +30,15 @@ def main():
                         help="The name of the feature set file")
     parser.add_argument("-sampleSHA", type=str,
                         help="The SHA (id) of the instance to be evaluated")
+    parser.add_argument("-distance", type=int,
+                        help="The distance on which to look for adversarial examples")
     opt = parser.parse_args()
     print(f"The parameters passed to the program are:\n\
-          config_file_name: {opt.config_file_name}\n\
-          classifier: {opt.classifier}\n\
-          feat_set_file: {opt.feat_set_file}\n\
-          sampleSHA: {opt.sampleSHA}")
+            config_file_name: {opt.config_file_name}\n\
+            classifier: {opt.classifier}\n\
+            feat_set_file: {opt.feat_set_file}\n\
+            sampleSHA: {opt.sampleSHA}\n\
+            distance: {opt.distance}")
 
     base_path = os.path.join(os.path.dirname(__file__))
     explanations_path = os.path.join(base_path, "../../explanations")
@@ -66,8 +69,10 @@ def main():
     explanation = findCXpDel(2, explanation_problem, "inf", advEx_oracle)
     print("############################################################################")
     print(f"explanation size: {len(explanation)}")
-    print(f"Saving explanation to: {os.path.join(explanations_path, f'CXp_{opt.classifier}_{opt.sampleSHA}.json')}")
-    with open(os.path.join(explanations_path, f"CXp_{opt.classifier}_{opt.sampleSHA}.json"), "w") as f:
+    print(f"Saving explanation to: {os.path.join(explanations_path,
+                f'CXp_{opt.classifier}_{opt.norm}_{opt.sampleSHA}.json')}")
+    with open(os.path.join(explanations_path,
+                    f"CXp_{opt.classifier}_{opt.sampleSHA}.json"), "w") as f:
         json.dump(explanation, f)
 
 
