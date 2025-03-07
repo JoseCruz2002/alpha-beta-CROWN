@@ -44,6 +44,7 @@ from input_split.batch_branch_and_bound import input_bab_parallel
 from read_vnnlib import read_vnnlib
 from cuts.cut_utils import terminate_mip_processes, terminate_mip_processes_by_c_matching
 from lp_test import compare_optimized_bounds_against_lp_bounds
+from load_model import load_model
 
 
 class ABCROWN:
@@ -569,15 +570,361 @@ class ABCROWN:
         else:
             model = model_ori
         return attack(model, x, vnnlib, verified_status, verified_success)
+    
+    def run_one_instance(self, new_idx, csv_item):
+        arguments.Globals['example_idx'] = new_idx
+        vnnlib_id = new_idx + arguments.Config['data']['start']
+        # Select some instances to verify
+        if self.select_instance and not vnnlib_id in self.select_instance:
+            return
+        self.logger.record_start_time()
+        print(f'\n {"%"*35} idx: {new_idx}, vnnlib ID: {vnnlib_id} {"%"*35}')
+        if arguments.Config['general']['save_output']:
+            arguments.Globals['out']['idx'] = new_idx   # saved for test
+        onnx_path = None
+        # (My run mode is customized data)
+        if self.run_mode != 'customized_data':
+            if len(csv_item) == 3:
+                # model, vnnlib, timeout
+                self.model_ori, self.shape, vnnlib, onnx_path = load_model_and_vnnlib(
+                    self.file_root, csv_item)
+                arguments.Config['model']['onnx_path'] = os.path.join(self.file_root, csv_item[0])
+                arguments.Config['specification']['vnnlib_path'] = os.path.join(
+                    self.file_root, csv_item[1])
+            else:
+                # Each line contains only 1 item, which is the vnnlib spec.
+                vnnlib = read_vnnlib(os.path.join(self.file_root, csv_item[0]))
+                assert arguments.Config['model']['input_shape'] is not None, (
+                    'vnnlib does not have shape information, '
+                    'please specify by --input_shape')
+                self.shape = arguments.Config['model']['input_shape']
+        else:
+            vnnlib = self.vnnlib_all[new_idx]  # vnnlib_all is a list of all standard vnnlib
+            # vnnlib contains the data_min and data_max arrays combined for the particular instance
+            #print(f"vnnlib: {vnnlib}")
+        # Skip running the actual verifier during preparation.
+        if arguments.Config['general']['prepare_only']:
+            return
+        # FIXME Don't write bab_args['timeout'] above.
+        # Then these updates can be moved to arguments.update_arguments()
+        self.bab_args['timeout'] = float(self.bab_args['timeout'])
+        if self.bab_args['timeout_scale'] != 1:
+            new_timeout = self.bab_args['timeout'] * self.bab_args['timeout_scale']
+            print(f'Scaling timeout: {self.bab_args["timeout"]} -> {new_timeout}')
+            self.bab_args['timeout'] = new_timeout
+        if self.bab_args['override_timeout'] is not None:
+            new_timeout = self.bab_args['override_timeout']
+            print(f'Overriding timeout: {new_timeout}')
+            self.bab_args['timeout'] = new_timeout
+        timeout_threshold = self.bab_args['timeout']
+        self.logger.update_timeout(timeout_threshold)
+        if arguments.Config['general']['complete_verifier'].startswith('Customized'):
+            res = eval(  # pylint: disable=eval-used
+                arguments.Config['general']['complete_verifier']
+            )(self.model_ori, vnnlib, os.path.join(self.file_root, onnx_path))
+            self.logger.summarize_results(res, new_idx)
+            return
+        self.model_ori.eval()
+        vnnlib_shape = self.shape # Comes from parse_run_mode()
+        attack_image = None
+        # FIXME attack and initial_incomplete_verification only works for
+        # assert len(vnnlib) == 1
+        if isinstance(vnnlib[0][0], dict):
+            x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
+            data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
+            data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
+        else:
+            x_range = torch.tensor(vnnlib[0][0])
+            data_min = x_range.select(-1, 0).reshape(vnnlib_shape)
+            data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
+            x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
+        adhoc_tuning(data_min, data_max, self.model_ori)
+        rhs_offset_init = arguments.Config['specification']['rhs_offset']
+        if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
+            vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
+        self.model_ori = self.model_ori.to(self.device)
+        x, data_max, data_min = x.to(self.device), data_max.to(self.device), data_min.to(self.device)
+        verified_status, verified_success = 'unknown', False
+        if arguments.Config['debug']['sanity_check']:
+            print('Warning: Sanity Check Debugging is enabled.',
+                  'The PGD upper bound will be calculated and used as the RHS offset.')
+            arguments.Config['attack']['pgd_order'] = 'before'
+        if arguments.Config['attack']['pgd_order'] == 'before':
+            (verified_status, verified_success, attack_image,
+             attack_margins, all_adv_candidates) = self.attack(
+                self.model_ori, x, vnnlib, verified_status, verified_success)
+            if arguments.Config['debug']['sanity_check']:
+                if arguments.Config['debug']['sanity_check'] in ['Full', 'Full+Graph']:
+                    rhs_offset = attack_margins.flatten().cpu().numpy()
+                else:
+                    rhs_offset = attack_margins.min().item()
+                # changes the verification status back to unknown and the pgd_order is now skip
+                # so that now unsafe instances will also time out
+                print('Warning: Changing the RHS offset to the worst PGD '
+                      'upper bound. If "rhs_offset" was set in the config/commandline, '
+                      'it will be ignored.')
+                print(f'Using PGD upper bound:\n{rhs_offset}.')
+                print(f'Shape of attack_margins: {attack_margins.shape}')
+                print(f'Verified success: {verified_success} -> False')
+                print(f'Verified success: {verified_status} -> \'unknown\'')
+                vnnlib = add_rhs_offset(vnnlib, rhs_offset)
+                arguments.Config['attack']['pgd_order'] = 'skip'
+                verified_status, verified_success = 'unknown', False
+        else:
+            attack_margins = all_adv_candidates = None
+        model_incomplete = cplex_processes = None
+        ret = {}
+        if arguments.Config['debug']['test_optimized_bounds']:
+            compare_optimized_bounds_against_lp_bounds(
+                self.model_ori, x, data_ub=data_max, data_lb=data_min, vnnlib=vnnlib
+            )
+        # Incomplete verification is enabled by default. The intermediate lower
+        # and upper bounds will be reused in bab and mip.
+        orig_lirpa_model = None
+        if (not verified_success
+                and arguments.Config['general']['enable_incomplete_verification']):
+            incomplete_verification_output = self.incomplete_verifier(
+                self.model_ori,
+                x,
+                data_ub=data_max,
+                data_lb=data_min,
+                vnnlib=vnnlib,
+                interm_bounds=self.interm_bounds
+            )
+            if arguments.Config['general']['return_optimized_model']:
+                return incomplete_verification_output
+            verified_status, ret, orig_lirpa_model = incomplete_verification_output
+            verified_success = verified_status != 'unknown'
+            model_incomplete = ret.get('model', None)
+            if arguments.Config['general']['complete_verifier'] == 'auto':
+                self.complete_verifier_var = check_enable_refinement(ret)
+                if self.complete_verifier_var in ['bab-refine', 'mip']:
+                    arguments.Config['bab']['interm_transfer'] = True
+                    arguments.Config['bab']['cut']['enabled'] = False
+                    arguments.Config['solver']['prune_after_crown'] = False
+                else:
+                    arguments.Config['bab']['interm_transfer'] = self.interm_transfer_init
+                    arguments.Config['bab']['cut']['enabled'] = self.cut_usage_init
+                    arguments.Config['solver']['prune_after_crown'] = self.p_a_crown_init
+        if not verified_success and arguments.Config['attack']['pgd_order'] == 'after':
+            (verified_status, verified_success, attack_image,
+             attack_margins, all_adv_candidates) = self.attack(
+                self.model_ori, x, vnnlib, verified_status, verified_success)
+        # MIP or MIP refined bounds.
+        if not verified_success and self.complete_verifier_var in ['bab-refine', 'mip']:
+            # rhs = ? NEED TO SAVE TO LIRPA_MODULE
+            mip_skip_unsafe = arguments.Config['solver']['mip']['skip_unsafe']
+            verified_status, ret_mip = mip(
+                model_incomplete, ret, mip_skip_unsafe=mip_skip_unsafe, vnnlib=vnnlib,
+                pgd_attack_example=[attack_image, attack_margins], verifier=self.complete_verifier_var)
+            verified_success = verified_status != 'unknown'
+            ret.update(ret_mip)
+        # extract the process pool for cut inquiry
+        mip_building_proc = None
+        if self.bab_args['cut']['enabled'] and self.bab_args['cut']['cplex_cuts']:
+            assert arguments.Config['bab']['initial_max_domains'] == 1
+            # use nullity of model_incomplete as an indicator of whether cut
+            # processes are launched
+            if model_incomplete is not None:
+                cplex_processes = model_incomplete.processes
+                print('Cut inquiry processes are launched.')
+                mip_building_proc = model_incomplete.mip_building_proc
+        # BaB bounds. (not do bab if unknown by mip solver for now)
+        if (not verified_success
+                and self.complete_verifier_var != 'skip'
+                and verified_status != 'unknown-mip'):
+            batched_vnnlib = batch_vnnlib(vnnlib)  # [x, [(c, rhs, y, pidx)]] in batch-wise
+            benchmark_name = (self.file_root.split('/')[-1]
+                              if self.debug_args['sanity_check'] is not None else None)
+            verified_status = self.complete_verifier(
+                self.model_ori, model_incomplete, vnnlib, batched_vnnlib, vnnlib_shape,
+                new_idx, bab_ret=self.logger.bab_ret, cplex_processes=cplex_processes,
+                timeout_threshold=timeout_threshold - (time.time() - self.logger.start_time),
+                attack_images=all_adv_candidates,
+                attack_margins=attack_margins, results=ret, vnnlib_id=vnnlib_id,
+                benchmark_name=benchmark_name, orig_lirpa_model=orig_lirpa_model
+            )
+        if (self.bab_args['cut']['enabled'] and self.bab_args['cut']['cplex_cuts']
+                and model_incomplete is not None):
+            terminate_mip_processes(mip_building_proc, cplex_processes)
+            del cplex_processes
+        del ret
+        if arguments.Config['debug']['sanity_check']:
+            arguments.Config['specification']['rhs_offset'] = rhs_offset_init
+        # Summarize results.
+        self.logger.summarize_results(verified_status, new_idx)
+    
+
+    def run_one_instance_externally(self, instance, vnnlib):
+        """
+        Arguments:
+            instance: The input I want to test for the existance of adversarial examples.
+            vnnlib: Contains the bounds, i.e. the fixing of the features.
+        Returns:
+            verified_status: The result of the verifier.
+        """
+        arguments.Globals['example_idx'] = 0
+        self.logger.record_start_time()
+        print(f'\n {"%"*35} num_instance: {self.num_instance} {"%"*35}')
+
+        # Skip running the actual verifier during preparation.
+        if arguments.Config['general']['prepare_only']:
+            return
+        # FIXME Don't write bab_args['timeout'] above.
+        # Then these updates can be moved to arguments.update_arguments()
+        self.bab_args['timeout'] = float(self.bab_args['timeout'])
+        if self.bab_args['timeout_scale'] != 1:
+            new_timeout = self.bab_args['timeout'] * self.bab_args['timeout_scale']
+            print(f'Scaling timeout: {self.bab_args["timeout"]} -> {new_timeout}')
+            self.bab_args['timeout'] = new_timeout
+        if self.bab_args['override_timeout'] is not None:
+            new_timeout = self.bab_args['override_timeout']
+            print(f'Overriding timeout: {new_timeout}')
+            self.bab_args['timeout'] = new_timeout
+        timeout_threshold = self.bab_args['timeout']
+        self.logger.update_timeout(timeout_threshold)
+        self.model_ori.eval()
+        vnnlib_shape = [-1, instance.shape[1]]
+        attack_image = None
+        # FIXME attack and initial_incomplete_verification only works for
+        # assert len(vnnlib) == 1
+        if isinstance(vnnlib[0][0], dict):
+            print("went first branch")
+            x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
+            data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
+            data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
+        else:
+            print("went second branch")
+            x_range = torch.tensor(vnnlib[0][0])
+            data_min = x_range.select(-1, 0).reshape(vnnlib_shape) # Check if this is correct
+            data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
+            x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
+        adhoc_tuning(data_min, data_max, self.model_ori)
+        rhs_offset_init = arguments.Config['specification']['rhs_offset']
+        if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
+            vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
+        self.model_ori = self.model_ori.to(self.device)
+        x, data_max, data_min = x.to(self.device), data_max.to(self.device), data_min.to(self.device)
+        verified_status, verified_success = 'unknown', False
+        if arguments.Config['debug']['sanity_check']:
+            print('Warning: Sanity Check Debugging is enabled.',
+                  'The PGD upper bound will be calculated and used as the RHS offset.')
+            arguments.Config['attack']['pgd_order'] = 'before'
+        if arguments.Config['attack']['pgd_order'] == 'before':
+            (verified_status, verified_success, attack_image,
+             attack_margins, all_adv_candidates) = self.attack(
+                self.model_ori, x, vnnlib, verified_status, verified_success)
+            if arguments.Config['debug']['sanity_check']:
+                if arguments.Config['debug']['sanity_check'] in ['Full', 'Full+Graph']:
+                    rhs_offset = attack_margins.flatten().cpu().numpy()
+                else:
+                    rhs_offset = attack_margins.min().item()
+                # changes the verification status back to unknown and the pgd_order is now skip
+                # so that now unsafe instances will also time out
+                print('Warning: Changing the RHS offset to the worst PGD '
+                      'upper bound. If "rhs_offset" was set in the config/commandline, '
+                      'it will be ignored.')
+                print(f'Using PGD upper bound:\n{rhs_offset}.')
+                print(f'Shape of attack_margins: {attack_margins.shape}')
+                print(f'Verified success: {verified_success} -> False')
+                print(f'Verified success: {verified_status} -> \'unknown\'')
+                vnnlib = add_rhs_offset(vnnlib, rhs_offset)
+                arguments.Config['attack']['pgd_order'] = 'skip'
+                verified_status, verified_success = 'unknown', False
+        else:
+            attack_margins = all_adv_candidates = None
+        model_incomplete = cplex_processes = None
+        ret = {}
+        if arguments.Config['debug']['test_optimized_bounds']:
+            compare_optimized_bounds_against_lp_bounds(
+                self.model_ori, x, data_ub=data_max, data_lb=data_min, vnnlib=vnnlib
+            )
+        # Incomplete verification is enabled by default. The intermediate lower
+        # and upper bounds will be reused in bab and mip.
+        orig_lirpa_model = None
+        if (not verified_success
+                and arguments.Config['general']['enable_incomplete_verification']):
+            incomplete_verification_output = self.incomplete_verifier(
+                self.model_ori,
+                x,
+                data_ub=data_max,
+                data_lb=data_min,
+                vnnlib=vnnlib,
+                interm_bounds=self.interm_bounds
+            )
+            if arguments.Config['general']['return_optimized_model']:
+                return incomplete_verification_output
+            verified_status, ret, orig_lirpa_model = incomplete_verification_output
+            verified_success = verified_status != 'unknown'
+            model_incomplete = ret.get('model', None)
+            if arguments.Config['general']['complete_verifier'] == 'auto':
+                self.complete_verifier_var = check_enable_refinement(ret)
+                if self.complete_verifier_var in ['bab-refine', 'mip']:
+                    arguments.Config['bab']['interm_transfer'] = True
+                    arguments.Config['bab']['cut']['enabled'] = False
+                    arguments.Config['solver']['prune_after_crown'] = False
+                else:
+                    arguments.Config['bab']['interm_transfer'] = self.interm_transfer_init
+                    arguments.Config['bab']['cut']['enabled'] = self.cut_usage_init
+                    arguments.Config['solver']['prune_after_crown'] = self.p_a_crown_init
+        if not verified_success and arguments.Config['attack']['pgd_order'] == 'after':
+            (verified_status, verified_success, attack_image,
+             attack_margins, all_adv_candidates) = self.attack(
+                self.model_ori, x, vnnlib, verified_status, verified_success)
+        # MIP or MIP refined bounds.
+        if not verified_success and self.complete_verifier_var in ['bab-refine', 'mip']:
+            # rhs = ? NEED TO SAVE TO LIRPA_MODULE
+            mip_skip_unsafe = arguments.Config['solver']['mip']['skip_unsafe']
+            verified_status, ret_mip = mip(
+                model_incomplete, ret, mip_skip_unsafe=mip_skip_unsafe, vnnlib=vnnlib,
+                pgd_attack_example=[attack_image, attack_margins], verifier=self.complete_verifier_var)
+            verified_success = verified_status != 'unknown'
+            ret.update(ret_mip)
+        # extract the process pool for cut inquiry
+        mip_building_proc = None
+        if self.bab_args['cut']['enabled'] and self.bab_args['cut']['cplex_cuts']:
+            assert arguments.Config['bab']['initial_max_domains'] == 1
+            # use nullity of model_incomplete as an indicator of whether cut
+            # processes are launched
+            if model_incomplete is not None:
+                cplex_processes = model_incomplete.processes
+                print('Cut inquiry processes are launched.')
+                mip_building_proc = model_incomplete.mip_building_proc
+         # BaB bounds. (not do bab if unknown by mip solver for now)
+        if (not verified_success
+                and self.complete_verifier_var != 'skip'
+                and verified_status != 'unknown-mip'):
+            batched_vnnlib = batch_vnnlib(vnnlib)  # [x, [(c, rhs, y, pidx)]] in batch-wise
+            benchmark_name = (self.file_root.split('/')[-1]
+                              if self.debug_args['sanity_check'] is not None else None)
+            verified_status = self.complete_verifier(
+                self.model_ori, model_incomplete, vnnlib, batched_vnnlib, vnnlib_shape,
+                self.num_instance, bab_ret=self.logger.bab_ret, cplex_processes=cplex_processes,
+                timeout_threshold=timeout_threshold - (time.time() - self.logger.start_time),
+                attack_images=all_adv_candidates,
+                attack_margins=attack_margins, results=ret, vnnlib_id=self.num_instance,
+                benchmark_name=benchmark_name, orig_lirpa_model=orig_lirpa_model
+            )
+        if (self.bab_args['cut']['enabled'] and self.bab_args['cut']['cplex_cuts']
+                and model_incomplete is not None):
+            terminate_mip_processes(mip_building_proc, cplex_processes)
+            del cplex_processes
+        del ret
+        if arguments.Config['debug']['sanity_check']:
+            arguments.Config['specification']['rhs_offset'] = rhs_offset_init
+        self.num_instance += 1
+        return verified_status # verified_success is just whether the verifier was got to a result other than unknown
+
 
     def main(self, interm_bounds=None):
         print(f'Experiments at {time.ctime()} on {socket.gethostname()}')
+        self.interm_bounds = interm_bounds
         torch.manual_seed(arguments.Config['general']['seed'])
         random.seed(arguments.Config['general']['seed'])
         np.random.seed(arguments.Config['general']['seed'])
         torch.set_printoptions(precision=8)
-        device = arguments.Config['general']['device']
-        if device != 'cpu':
+        self.device = arguments.Config['general']['device']
+        if self.device != 'cpu':
             torch.cuda.manual_seed_all(arguments.Config['general']['seed'])
             # Always disable TF32 (precision is too low for verification).
             torch.backends.cuda.matmul.allow_tf32 = False
@@ -590,19 +937,31 @@ class ABCROWN:
         if arguments.Config['general']['precompile_jit']:
             precompile_jit_kernels()
 
-        bab_args = arguments.Config['bab']
-        debug_args = arguments.Config['debug']
-        timeout_threshold = bab_args['timeout']
-        interm_transfer_init = bab_args['interm_transfer']
-        cut_usage_init = bab_args['cut']['enabled']
-        select_instance = arguments.Config['data']['select_instance']
-        complete_verifier = arguments.Config['general']['complete_verifier']
-        p_a_crown_init = arguments.Config['solver']['prune_after_crown']
-        if bab_args['backing_up_max_domain'] is None:
-            arguments.Config['bab']['backing_up_max_domain'] = bab_args['initial_max_domains']
-        (run_mode, save_path, file_root, example_idx_list, model_ori,
-        vnnlib_all, shape) = parse_run_mode()
-        self.logger = Logger(run_mode, save_path, timeout_threshold)
+        self.bab_args = arguments.Config['bab']
+        self.debug_args = arguments.Config['debug']
+        self.timeout_threshold = self.bab_args['timeout']
+        self.interm_transfer_init = self.bab_args['interm_transfer']
+        self.cut_usage_init = self.bab_args['cut']['enabled']
+        self.select_instance = arguments.Config['data']['select_instance']
+        self.complete_verifier_var = arguments.Config['general']['complete_verifier']
+        self.p_a_crown_init = arguments.Config['solver']['prune_after_crown']
+        if self.bab_args['backing_up_max_domain'] is None:
+            arguments.Config['bab']['backing_up_max_domain'] = self.bab_args['initial_max_domains']
+        if arguments.Config['general']['normal_run']:
+            (self.run_mode, self.save_path, self.file_root, example_idx_list, self.model_ori,
+            self.vnnlib_all, self.shape) = parse_run_mode()
+            
+            print()
+            print(f"run_mode: {self.run_mode}, type: {type(self.run_mode)}")
+            print(f"save_path: {self.save_path}, type: {type(self.save_path)}")
+            print(f"file_root: {self.file_root}, type: {type(self.file_root)}")
+            print(f"example_idx_list: {example_idx_list}, type: {type(example_idx_list)}")
+            print(f"model_ori: {self.model_ori}, type: {type(self.model_ori)}")
+            print(f"vnnlib_all: {self.vnnlib_all}, type: {type(self.vnnlib_all)}")
+            print(f"shape: {self.shape}, type: {type(self.shape)}")
+            print()
+
+            self.logger = Logger(self.run_mode, self.save_path, self.timeout_threshold)
 
         if arguments.Config['general']['return_optimized_model']:
             assert len(example_idx_list) == 1, (
@@ -613,211 +972,35 @@ class ABCROWN:
             'The PGD upper bound will be calculated and used as the RHS offset.')
             arguments.Config['attack']['pgd_order'] = 'before'
 
-        for new_idx, csv_item in enumerate(example_idx_list):
-            arguments.Globals['example_idx'] = new_idx
-            vnnlib_id = new_idx + arguments.Config['data']['start']
-            # Select some instances to verify
-            if select_instance and not vnnlib_id in select_instance:
-                continue
-            self.logger.record_start_time()
-
-            print(f'\n {"%"*35} idx: {new_idx}, vnnlib ID: {vnnlib_id} {"%"*35}')
-            if arguments.Config['general']['save_output']:
-                arguments.Globals['out']['idx'] = new_idx   # saved for test
-
-            onnx_path = None
-            if run_mode != 'customized_data':
-                if len(csv_item) == 3:
-                    # model, vnnlib, timeout
-                    model_ori, shape, vnnlib, onnx_path = load_model_and_vnnlib(
-                        file_root, csv_item)
-                    arguments.Config['model']['onnx_path'] = os.path.join(file_root, csv_item[0])
-                    arguments.Config['specification']['vnnlib_path'] = os.path.join(
-                        file_root, csv_item[1])
-                else:
-                    # Each line contains only 1 item, which is the vnnlib spec.
-                    vnnlib = read_vnnlib(os.path.join(file_root, csv_item[0]))
-                    assert arguments.Config['model']['input_shape'] is not None, (
-                        'vnnlib does not have shape information, '
-                        'please specify by --input_shape')
-                    shape = arguments.Config['model']['input_shape']
-            else:
-                vnnlib = vnnlib_all[new_idx]  # vnnlib_all is a list of all standard vnnlib
-
-            # Skip running the actual verifier during preparation.
-            if arguments.Config['general']['prepare_only']:
-                continue
-
-            # FIXME Don't write bab_args['timeout'] above.
-            # Then these updates can be moved to arguments.update_arguments()
-            bab_args['timeout'] = float(bab_args['timeout'])
-            if bab_args['timeout_scale'] != 1:
-                new_timeout = bab_args['timeout'] * bab_args['timeout_scale']
-                print(f'Scaling timeout: {bab_args["timeout"]} -> {new_timeout}')
-                bab_args['timeout'] = new_timeout
-            if bab_args['override_timeout'] is not None:
-                new_timeout = bab_args['override_timeout']
-                print(f'Overriding timeout: {new_timeout}')
-                bab_args['timeout'] = new_timeout
-            timeout_threshold = bab_args['timeout']
-            self.logger.update_timeout(timeout_threshold)
-
-            if arguments.Config['general']['complete_verifier'].startswith('Customized'):
-                res = eval(  # pylint: disable=eval-used
-                    arguments.Config['general']['complete_verifier']
-                )(model_ori, vnnlib, os.path.join(file_root, onnx_path))
-                self.logger.summarize_results(res, new_idx)
-                continue
-
-            model_ori.eval()
-            vnnlib_shape = shape
-            attack_image = None
-
-            # FIXME attack and initial_incomplete_verification only works for
-            # assert len(vnnlib) == 1
-            if isinstance(vnnlib[0][0], dict):
-                x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
-                data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
-                data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
-            else:
-                x_range = torch.tensor(vnnlib[0][0])
-                data_min = x_range.select(-1, 0).reshape(vnnlib_shape)
-                data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
-                x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
-            adhoc_tuning(data_min, data_max, model_ori)
-
-            rhs_offset_init = arguments.Config['specification']['rhs_offset']
-            if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
-                vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
-
-            model_ori = model_ori.to(device)
-            x, data_max, data_min = x.to(device), data_max.to(device), data_min.to(device)
-            verified_status, verified_success = 'unknown', False
-
-            if arguments.Config['debug']['sanity_check']:
-                print('Warning: Sanity Check Debugging is enabled.',
-                      'The PGD upper bound will be calculated and used as the RHS offset.')
-                arguments.Config['attack']['pgd_order'] = 'before'
-
-            if arguments.Config['attack']['pgd_order'] == 'before':
-                (verified_status, verified_success, attack_image,
-                 attack_margins, all_adv_candidates) = self.attack(
-                    model_ori, x, vnnlib, verified_status, verified_success)
-                if arguments.Config['debug']['sanity_check']:
-                    if arguments.Config['debug']['sanity_check'] in ['Full', 'Full+Graph']:
-                        rhs_offset = attack_margins.flatten().cpu().numpy()
-                    else:
-                        rhs_offset = attack_margins.min().item()
-                    # changes the verification status back to unknown and the pgd_order is now skip
-                    # so that now unsafe instances will also time out
-                    print('Warning: Changing the RHS offset to the worst PGD '
-                          'upper bound. If "rhs_offset" was set in the config/commandline, '
-                          'it will be ignored.')
-                    print(f'Using PGD upper bound:\n{rhs_offset}.')
-                    print(f'Shape of attack_margins: {attack_margins.shape}')
-                    print(f'Verified success: {verified_success} -> False')
-                    print(f'Verified success: {verified_status} -> \'unknown\'')
-                    vnnlib = add_rhs_offset(vnnlib, rhs_offset)
-                    arguments.Config['attack']['pgd_order'] = 'skip'
-                    verified_status, verified_success = 'unknown', False
-            else:
-                attack_margins = all_adv_candidates = None
-
-            model_incomplete = cplex_processes = None
-            ret = {}
-
-            if arguments.Config['debug']['test_optimized_bounds']:
-                compare_optimized_bounds_against_lp_bounds(
-                    model_ori, x, data_ub=data_max, data_lb=data_min, vnnlib=vnnlib
-                )
-
-            # Incomplete verification is enabled by default. The intermediate lower
-            # and upper bounds will be reused in bab and mip.
-            orig_lirpa_model = None
-            if (not verified_success
-                    and arguments.Config['general']['enable_incomplete_verification']):
-                incomplete_verification_output = self.incomplete_verifier(
-                    model_ori,
-                    x,
-                    data_ub=data_max,
-                    data_lb=data_min,
-                    vnnlib=vnnlib,
-                    interm_bounds=interm_bounds
-                )
-                if arguments.Config['general']['return_optimized_model']:
-                    return incomplete_verification_output
-                verified_status, ret, orig_lirpa_model = incomplete_verification_output
-
-                verified_success = verified_status != 'unknown'
-                model_incomplete = ret.get('model', None)
-
-                if arguments.Config['general']['complete_verifier'] == 'auto':
-                    complete_verifier = check_enable_refinement(ret)
-                    if complete_verifier in ['bab-refine', 'mip']:
-                        arguments.Config['bab']['interm_transfer'] = True
-                        arguments.Config['bab']['cut']['enabled'] = False
-                        arguments.Config['solver']['prune_after_crown'] = False
-                    else:
-                        arguments.Config['bab']['interm_transfer'] = interm_transfer_init
-                        arguments.Config['bab']['cut']['enabled'] = cut_usage_init
-                        arguments.Config['solver']['prune_after_crown'] = p_a_crown_init
-
-            if not verified_success and arguments.Config['attack']['pgd_order'] == 'after':
-                (verified_status, verified_success, attack_image,
-                 attack_margins, all_adv_candidates) = self.attack(
-                    model_ori, x, vnnlib, verified_status, verified_success)
-            # MIP or MIP refined bounds.
-            if not verified_success and complete_verifier in ['bab-refine', 'mip']:
-                # rhs = ? NEED TO SAVE TO LIRPA_MODULE
-                mip_skip_unsafe = arguments.Config['solver']['mip']['skip_unsafe']
-                verified_status, ret_mip = mip(
-                    model_incomplete, ret, mip_skip_unsafe=mip_skip_unsafe, vnnlib=vnnlib,
-                    pgd_attack_example=[attack_image, attack_margins], verifier=complete_verifier)
-                verified_success = verified_status != 'unknown'
-                ret.update(ret_mip)
-
-            # extract the process pool for cut inquiry
-            mip_building_proc = None
-            if bab_args['cut']['enabled'] and bab_args['cut']['cplex_cuts']:
-                assert arguments.Config['bab']['initial_max_domains'] == 1
-                # use nullity of model_incomplete as an indicator of whether cut
-                # processes are launched
-                if model_incomplete is not None:
-                    cplex_processes = model_incomplete.processes
-                    print('Cut inquiry processes are launched.')
-                    mip_building_proc = model_incomplete.mip_building_proc
-
-            # BaB bounds. (not do bab if unknown by mip solver for now)
-            if (not verified_success
-                    and complete_verifier != 'skip'
-                    and verified_status != 'unknown-mip'):
-                batched_vnnlib = batch_vnnlib(vnnlib)  # [x, [(c, rhs, y, pidx)]] in batch-wise
-                benchmark_name = (file_root.split('/')[-1]
-                                  if debug_args['sanity_check'] is not None else None)
-                verified_status = self.complete_verifier(
-                    model_ori, model_incomplete, vnnlib, batched_vnnlib, vnnlib_shape,
-                    new_idx, bab_ret=self.logger.bab_ret, cplex_processes=cplex_processes,
-                    timeout_threshold=timeout_threshold - (time.time() - self.logger.start_time),
-                    attack_images=all_adv_candidates,
-                    attack_margins=attack_margins, results=ret, vnnlib_id=vnnlib_id,
-                    benchmark_name=benchmark_name, orig_lirpa_model=orig_lirpa_model
-                )
-
-            if (bab_args['cut']['enabled'] and bab_args['cut']['cplex_cuts']
-                    and model_incomplete is not None):
-                terminate_mip_processes(mip_building_proc, cplex_processes)
-                del cplex_processes
-            del ret
-
-            if arguments.Config['debug']['sanity_check']:
-                arguments.Config['specification']['rhs_offset'] = rhs_offset_init
-            # Summarize results.
-            self.logger.summarize_results(verified_status, new_idx)
-
+        ## ---------------------------------------------------------------------------------- ##
+        # Meter tudo para baixo disto numa funcao independente??
+        # A funcao vai ter de receber o seu proprio vnnlib para os bounds
+        ## ---------------------------------------------------------------------------------- ##
+        if arguments.Config['general']['normal_run']:
+            for new_idx, csv_item in enumerate(example_idx_list):
+                self.run_one_instance(new_idx, csv_item)
+        else:
+            # Running as oracle
+            # Calling the actual abCrown tool must be done externally
+            print("Running abCrown tool as an oracle. Waiting for instance to verify.")
+            self.num_instance = 0
+            self.run_mode = "customized_data"
+            if arguments.Config['general']['results_file']:
+                self.save_path = arguments.Config['general']['results_file']
+            self.model_ori = load_model(weights_loaded=True)
+            print()
+            print(f"run_mode: {self.run_mode}, type: {type(self.run_mode)}")
+            print(f"save_path: {self.save_path}, type: {type(self.save_path)}")
+            print(f"model_ori: {self.model_ori}, type: {type(self.model_ori)}")
+            print()
+            self.logger = Logger(self.run_mode, self.save_path, self.timeout_threshold)
+            return
+            
         self.logger.finish()
         return self.logger.verification_summary
 
 
 if __name__ == '__main__':
+    print(sys.argv[1:])
     abcrown = ABCROWN(args=sys.argv[1:])
     abcrown.main()

@@ -195,29 +195,59 @@ from zipfile import ZipFile, ZIP_DEFLATED
 import pandas as pd
 import numpy as np
 
-def my_data_loader(spec):
-    X = csr_matrix_to_tensor(get_input())
-    labels = torch.tensor(get_labels())
+def my_data_loader(spec, fix_features=False):
+    aux, vectorizer = get_input(spec)
+    X = csr_matrix_to_tensor(aux[:2])
+    labels = torch.tensor(get_labels()[:2])
 
-    data_max = torch.ones(1, X.shape[1])
-    data_min = torch.zeros(1, X.shape[1])
-    eps = spec["epsilon"]
-    ret_eps = torch.full((1, X.shape[1]), eps)
+    if not fix_features:
+        data_max = torch.ones(1, X.shape[1])
+        data_min = torch.zeros(1, X.shape[1])
+        eps = spec["epsilon"]
+        ret_eps = torch.full((1, X.shape[1]), eps) if eps is not None else None
+    else:
+        fixed_features_idxs = get_fixed_features_idxs(spec, vectorizer)
+        assert fixed_features_idxs is not None
+        print(f"The fixed_features are: {fixed_features_idxs}")
+        ff_tensor = torch.tensor(fixed_features_idxs)
+        data_max, data_min = fix_correct_features(X, ff_tensor)
+        ret_eps = None
 
-    #print(f"SHAPE OF DATA_MAX: {data_max.shape}")
-    #print(f"SHAPE OF DATA_MIN: {data_min.shape}")
-    #print(f"SHAPE OF RET_EPS: {ret_eps.shape}")
+    print(f"SHAPE OF X: {X.shape}")
+    print(f"SHAPE OF DATA_MAX: {data_max.shape}")
+    print(f"SHAPE OF DATA_MIN: {data_min.shape}")
+    print(f"SHAPE OF RET_EPS: {ret_eps.shape if ret_eps is not None else ''}")
 
     return X, labels, data_max, data_min, ret_eps
-    
 
-def get_input():
+def fix_correct_features(X, fixed_features_idxs):
+    # Initialize data_min and data_max
+    data_min = torch.zeros_like(X, dtype=torch.float32)
+    data_max = torch.ones_like(X, dtype=torch.float32)
+    # Assign input values to fixed indices in both tensors
+    data_min[:, fixed_features_idxs] = X[:, fixed_features_idxs]
+    data_max[:, fixed_features_idxs] = X[:, fixed_features_idxs]
+    return data_max, data_min
+
+def get_fixed_features_idxs(spec, vectorizer: CountVectorizer):
     base_path = os.path.join(os.path.dirname(__file__))
-    ## This is not in the configuration file!!----
-    with open(os.path.join(base_path, "../../../elsa-cybersecurity/track_1/"+
-              "selected_features/UnivariateFS-k_best-mutual_info_classif-10000.json")) as f:
-        vocabulary = json.load(f)
-    ## -------------------------------------------
+    fixed_features_path = spec["fixed_features_path"]
+    assert fixed_features_path is not None
+    with open(os.path.join(base_path, fixed_features_path)) as f:
+        fixed_features = json.load(f)
+    features_names = vectorizer.get_feature_names_out().tolist()
+    index_map = {value: idx for idx, value in enumerate(features_names)}
+    res = list(index_map[val] for val in fixed_features)
+    return res
+
+def get_input(spec):
+    base_path = os.path.join(os.path.dirname(__file__))
+    selected_features_path = spec["selected_features_path"]
+    if selected_features_path is not None:
+        with open(os.path.join(base_path, selected_features_path)) as f:
+            vocabulary = json.load(f)
+    else:
+        vocabulary = None
     vectorizer = CountVectorizer(
             input="content", lowercase=False,
             tokenizer=lambda x: x, binary=True, token_pattern=None,
@@ -225,7 +255,7 @@ def get_input():
     database_path = os.path.join(base_path, '../datasets/elsa_comp')
     features_tr = load_features(
             os.path.join(database_path, "training_set_features.zip"))
-    return vectorizer.fit_transform(features_tr)
+    return vectorizer.fit_transform(features_tr), vectorizer
 
 def get_labels():
     base_path = os.path.join(os.path.dirname(__file__))

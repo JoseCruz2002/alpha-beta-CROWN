@@ -144,6 +144,9 @@ class ConfigHandler:
         self.add_argument("--return_optimized_model", action='store_true',
                           help="Return the model with optimized bounds after incomplete verification is done.",
                           hierarchy=h + ["return_optimized_model"])
+        self.add_argument("--normal_run", action="store_false",
+                          help="Whether run a abCrown normally or as an oracle.",
+                          hierarchy=h + ["normal_run"])
 
 
         h = ["model"]
@@ -257,6 +260,12 @@ class ConfigHandler:
         self.add_argument("--rhs_offset", type=float, default=None,
                           help='Adding an offset to RHS.',
                           hierarchy=h + ['rhs_offset'])
+        self.add_argument("--selected_features_path", type=str, default=None,
+                          help="The path to the file containing the features selected during FS (elsa-comp addition).",
+                          hierarchy=h + ["selected_features_path"])
+        self.add_argument("--fixed_features_path", type=str, default=None,
+                          help="The path to the file containig the desired features to fix (elsa-comp addition).",
+                          hierarchy=h + ["fixed_features_path"])
 
         h = ["solver"]
         self.add_argument("--batch_size", type=int, default=64,

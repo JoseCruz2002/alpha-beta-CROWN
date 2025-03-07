@@ -1,0 +1,34 @@
+# Example for using customized model and data loader.
+# Model and data loader defined in custom_model_data.py
+# python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
+general:
+  device: cpu
+  save_output: true
+model:
+  # Model is defined as simple_conv_model() in custom_model_data.py. The function simple_conv_model() will be called with arguments in_channel=3, out_dim=10.
+  name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=28, hidden_size=10, layers=2)
+  # Path to model checkpoint.
+  path: models/elsa_comp/FFNN_normal_small_CEL0109__VarianceFS-04_classifier.pth
+data:
+  start: 0
+  end: 75000 
+  dataset: Customized("custom_model_data", "my_data_loader", fix_features=True)
+  num_outputs: 2  # Number of classes for classification problem.
+specification:
+  # Element-wise perturbation.
+  type: box
+  norm: .inf
+  epsilon: 0.00784313725  # 2./255.
+  selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/VarianceFS-04.json
+  fixed_features_path: ../../../elsa-cybersecurity/track_1/fixed_features/fixed_features_v1.json
+attack:
+  pgd_restarts: 100
+  pgd_order: after
+  #pgd_alpha: auto  # Step size of PGD attack. Default (auto) is epsilon/4.
+  #pgd_alpha_scale: true??  # Scale PGD alpha according to data_max-data_min.
+solver:
+  batch_size: 2048
+  beta-crown:
+    iteration: 20
+bab:
+  timeout: 300

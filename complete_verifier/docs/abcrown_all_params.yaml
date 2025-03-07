@@ -23,6 +23,7 @@ general:
   save_output: false  # Save output for test.
   output_file: out.pkl  # Path to the output file.
   return_optimized_model: false  # Return the model with optimized bounds after incomplete verification is done.
+  normal_run: true # Whether run abCrown normally or as an oracle
 model:
   name: null  # Model name. Will be evaluated as a python statement.
   path: null  # Load pretrained model from this specified path.
@@ -57,6 +58,8 @@ specification:
   vnnlib_path: null  # Path to .vnnlib specification file. Will override any Lp/robustness verification arguments.
   vnnlib_path_prefix: ''  # Add a prefix to .vnnlib specs path to correct malformed csv files.
   rhs_offset: null  # Adding an offset to RHS.
+  selected_features_path: null # The path to the file containing the features selected during FS (elsa-comp addition)
+  fixed_features_path: null # The path to the file containig the desired features to fix (elsa-comp addition)
 solver:
   batch_size: 64  # Batch size in bound solver (number of parallel splits).
   auto_enlarge_batch_size: false  # Automatically increase batch size based on --batch_size in bab if current VRAM usage < 45%%, only support input_split.
