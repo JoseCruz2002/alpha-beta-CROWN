@@ -20,7 +20,8 @@ class abCrown_Oracle(BaseOracle):
         input = self.csr_matrix_to_tensor(input_trans)
         verified_status = self.oracle.run_abCrown(input, vnnlib)
         print(f"verified_status by the oracle: {verified_status}")
-        if "unsafe" in verified_status:
+        if ("unsafe" in verified_status or "sat" in verified_status or
+                "attack success" in verified_status):
             return True
         else:
             return False

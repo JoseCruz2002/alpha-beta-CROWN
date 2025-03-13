@@ -15,7 +15,8 @@ def findCXpDel(distance: int, explanation_problem: ExplanationProblem,
     S: list[str] = F.copy()
     for feature in F:
         S.remove(feature)
-        hasAE = advEx_oracle.findAdvEx(distance, S, explanation_problem, norm)
+        F_except_S = list(x for x in F if x not in S)
+        hasAE = advEx_oracle.findAdvEx(distance, F_except_S, explanation_problem, norm)
         if not hasAE:
             S.append(feature)
     return S
@@ -69,10 +70,10 @@ def main():
     explanation = findCXpDel(2, explanation_problem, "inf", advEx_oracle)
     print("############################################################################")
     print(f"explanation size: {len(explanation)}")
-    print(f"Saving explanation to: {os.path.join(explanations_path, f'CXp_{opt.classifier}_{opt.norm}_{opt.sampleSHA}.json')}")
+    print(f"Saving explanation to: {os.path.join(explanations_path, f'CXp_{opt.classifier}_{opt.distance}_{opt.sampleSHA}.json')}")
     with open(os.path.join(explanations_path,
                            f"CXp_{opt.classifier}_{opt.sampleSHA}.json"), "w") as f:
-        json.dump(explanation, f)
+        json.dump(explanation, f, indent=2)
 
 
 if __name__ == "__main__":

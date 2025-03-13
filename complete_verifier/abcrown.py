@@ -790,18 +790,21 @@ class ABCROWN:
         attack_image = None
         # FIXME attack and initial_incomplete_verification only works for
         # assert len(vnnlib) == 1
+        #print(f"vnnlib[0][0]: {vnnlib[0][0]}")
         if isinstance(vnnlib[0][0], dict):
-            print("went first branch")
+            #print("went first branch")
             x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
             data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
             data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
         else:
-            print("went second branch")
+            #print("went second branch")
             x_range = torch.tensor(vnnlib[0][0])
             data_min = x_range.select(-1, 0).reshape(vnnlib_shape) # Check if this is correct
             data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
             x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
         adhoc_tuning(data_min, data_max, self.model_ori)
+        #print(f"\ndata_min: {data_min}")
+        #print(f"data_max: {data_max}\n")
         rhs_offset_init = arguments.Config['specification']['rhs_offset']
         if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
             vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
