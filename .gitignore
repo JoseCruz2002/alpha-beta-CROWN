@@ -27,5 +27,5 @@ cachier
 out.csv
 results.csv
 *.zip
-*.pth
-*.pkl
+#*.pth
+#*.pkl
