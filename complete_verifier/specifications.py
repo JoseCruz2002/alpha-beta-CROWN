@@ -274,6 +274,8 @@ def prune_by_idx(reference_alphas, init_verified_cond, final_name, lA_trim, x, d
 
 def batch_vnnlib(vnnlib):
     """reorganize original vnnlib file, make x, c and rhs batch wise"""
+    print(f"-- specifications; batch_vnnlib; len(vnnlib): {len(vnnlib)}")
+    #print(f"-- specifications; batch_vnnlib; vnnlib[0]: {vnnlib[0]}")
     final_merged_rv = []
 
     init_d = {'x': [], 'c': [], 'rhs': [],
@@ -282,6 +284,9 @@ def batch_vnnlib(vnnlib):
 
     for vnn in vnnlib:
         for mat, rhs in vnn[1]:
+            #print(f"-- specifications; batch_vnnlib; mat: {mat}")
+            #print(f"-- specifications; batch_vnnlib; rhs: {rhs}")
+            #print(f"-- specifications; batch_vnnlib; vnn[0] type: {type(vnn[0])}")
             if isinstance(vnn[0], dict):
                 init_d['x'].append(vnn[0])
             else:
@@ -300,6 +305,7 @@ def batch_vnnlib(vnnlib):
 
             target_labels.append(np.array(tmp_target_labels))
 
+    #print(f"-- specifications; batch_vnnlib; init_d['x'][0] type: {type(init_d['x'][0])}")
     if len(init_d['x']) == 0 or isinstance(init_d['x'][0], np.ndarray):
         # n, shape, 2; the batch dim n is necessary, even if n = 1
         init_d['x'] = np.array(init_d['x'])

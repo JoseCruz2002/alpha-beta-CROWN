@@ -11,33 +11,61 @@ class abCrown_Oracle(BaseOracle):
 
     def findAdvEx(self, distance, fixed_features, explanation_problem, norm):
         input_trans = explanation_problem.value
+        #print(f"input_trans: {input_trans}")
+        input = self.csr_matrix_to_tensor(input_trans)
+        #print(f"-- abCrown_Oracle.py; findAdvEx; input shape: {input.shape}")
+        #print(f"input_trans: {input_trans}")
         vnnlib = self.get_vnnlib(
-            explanation_problem.classification_problem.feature_set,
-            fixed_features,
-            input_trans   
+            feature_set=explanation_problem.classification_problem.feature_set,
+            fixed_features=fixed_features,
+            input_trans=input_trans,
+            distance=distance,
+            input=input,
+            norm=norm,
+            label=explanation_problem.classification
         )
         #print(f"vnnlib: {vnnlib}")
-        input = self.csr_matrix_to_tensor(input_trans)
+        #print(f"input: {input.shape}; {input[:5]}")
+        #print(f"-- abCrown_Oracle.py; findAdvEx; vnnlib[0][0]['X'] shape {vnnlib[0][0]['X'].shape}")
+        #print(f"-- abcrown_oracle; findAdvEx; vnnlib: {vnnlib}")
         verified_status = self.oracle.run_abCrown(input, vnnlib)
         print(f"verified_status by the oracle: {verified_status}")
         if ("unsafe" in verified_status or "sat" in verified_status or
-                "attack success" in verified_status):
+                "attack success" in verified_status): #or "unknown" in verified_status):
             return True
         else:
             return False
         
-    def get_vnnlib(self, feature_set, fixed_features, input_trans):
+    def get_vnnlib(self, feature_set, fixed_features, input_trans, distance, input, norm, label):
         #print(f"input_trans: {input_trans.shape}")
         index_map = {value: idx for idx, value in enumerate(feature_set)}
         fix_idxs = list(index_map[val] for val in fixed_features)
         res = []
+        data_min = []
+        data_max = []
         for i in range(len(feature_set)):
             if i in fix_idxs:
-                idx_value = 1 if i in input_trans.nonzero()[1] else 0
-                res += [[idx_value, idx_value]]
+                idx_value = input[0][i]
+                #res += [[idx_value, idx_value]]
+                data_min += [float(idx_value)]
+                data_max += [float(idx_value)]
             else:
-                res += [[0, 1]]
-        return [(np.array(res, dtype=np.float32), [(torch.tensor([[1.0, -1.0, ]]), np.array([0]))])]
+                #res += [[0, 1]]
+                data_min += [0]
+                data_max += [1]
+        #prop00 = np.array(res, dtype=np.float32)
+        prop00 = {
+            'X': input,
+            'data_min': torch.tensor(data_min, dtype=int),
+            'data_max': torch.tensor(data_max, dtype=int),
+            'eps': float(distance),
+            'eps_min': 0.0,
+            'norm': norm,
+        }
+        mat = torch.tensor([[1.0, -1.0, ]]) if label == 1 else torch.tensor([[-1.0, 1.0, ]])
+        # Meaning: vnnlib = [prop00, (mat, rhs)]
+        return [(prop00, [(mat, torch.tensor([0.0]))])]
+        #return [(prop00, [(torch.tensor([[1.0, -1.0]]), np.array([0]))])]
             
     def csr_matrix_to_tensor(self, csr_matrix):
         coo_matrix = csr_matrix.tocoo()

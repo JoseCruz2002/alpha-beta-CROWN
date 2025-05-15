@@ -172,7 +172,8 @@ class LiRPANet:
         if ub is None:
             ub = lb + torch.inf
         upper_bounds[self.final_name] = ub.flatten(1).detach()
-
+        #print(f"-- LiRPANet; get_interm_bounds; lower_bounds: {lower_bounds}")
+        #print(f"-- LiRPANet; get_interm_bounds; upper_bounds: {upper_bounds}")
         return lower_bounds, upper_bounds
 
     def get_mask(self):

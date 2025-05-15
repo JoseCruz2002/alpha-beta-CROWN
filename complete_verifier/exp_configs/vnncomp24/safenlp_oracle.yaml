@@ -4,6 +4,9 @@ general:
   csv_name: instances.csv
   complete_verifier: mip
   device: cpu
+  normal_run: false
+#specification:
+#  vnnlib_path: vnnlib/ruarobot/hyperrectangle_67.vnnlib
 attack:
   pgd_order: after
   pgd_restarts: 10000

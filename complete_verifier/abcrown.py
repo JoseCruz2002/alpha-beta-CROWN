@@ -74,6 +74,8 @@ class ABCROWN:
         # Generally, c should be constructed from vnnlib
         assert len(vnnlib) == 1, 'incomplete_verifier only support single x spec'
         input_x, specs = vnnlib[0]
+        #print(f"-- input_x type: {type(input_x)}; len: {len(input_x)}")
+        #print(f"-- specs type: {type(specs)}; len: {len(specs)}; {specs}")
         c_transposed = False
         tighten_input_bounds = (
             arguments.Config['solver']['invprop']['tighten_input_bounds']
@@ -114,7 +116,8 @@ class ABCROWN:
             # shape: (1, num_clauses in AND)
             rhs = torch.tensor(specs[0][1], dtype=data.dtype, device=data.device).unsqueeze(0)
             stop_func = stop_criterion_batch_any(rhs)
-
+        #print(f"-- c shape: {c.shape}; {c}")
+        #print(f"-- rhs shape: {rhs.shape}; {rhs}")
         model = LiRPANet(model_ori, in_size=data.shape, c=c)
 
         bound_prop_method = arguments.Config['solver']['bound_prop_method']
@@ -136,7 +139,7 @@ class ABCROWN:
                     if isinstance(node, BoundConv) and node.mode == 'patches':
                         node.mode = 'matrix'
 
-        if isinstance(input_x, dict):
+        if isinstance(input_x, dict): # The program enters here
             # Traditional Lp norm case. Still passed in as an vnnlib variable, but it is passed
             # in as a dictionary.
             ptb = PerturbationLpNorm(
@@ -147,6 +150,7 @@ class ABCROWN:
             norm = arguments.Config['specification']['norm']
             # Perturbation value for non-Linf perturbations, None for all other cases.
             ptb = PerturbationLpNorm(norm=norm, x_L=data_lb, x_U=data_ub)
+        print(f"-- abcrown; incomplete_verifier - ptb: {ptb}")
         x = BoundedTensor(data, ptb).to(data.device)
         output = model.net(x)
         print_model(model.net)
@@ -157,6 +161,7 @@ class ABCROWN:
             arguments.Globals['out']['pred'] = output.cpu()
 
         domain = torch.stack([data_lb.squeeze(0), data_ub.squeeze(0)], dim=-1)
+        #print(f"-- abcrown; incomplete_verifier - domain: {domain}")
         # one of them is sufficient.
         global_lb, ret = model.build(
             domain, x, stop_criterion_func=stop_func, decision_thresh=rhs, vnnlib_ori=vnnlib,
@@ -169,7 +174,10 @@ class ABCROWN:
             # transpose back to get ready for general verified condition check and final outputs
             global_lb = global_lb.t()
             rhs = rhs.t()
-
+        
+        print(f"-- global_lb: {global_lb}")
+        print(f"-- rhs: {rhs}")
+        
         if torch.any((global_lb - rhs) > 0, dim=-1).all():
             # Any spec in AND verified means verified. Also check all() at batch dim.
             print('verified with init bound!')
@@ -263,17 +271,20 @@ class ABCROWN:
 
         data_lb, data_ub = data_lb.to(self.model.device), data_ub.to(self.model.device)
         norm = arguments.Config['specification']['norm']
+        #print(f"-- data_dict in bab function: {data_dict}")
         if data_dict is not None:
             assert isinstance(data_dict['eps'], float)
             ptb = PerturbationLpNorm(
-                norm=norm, eps=data_dict['eps'],
+                norm=data_dict['norm'], eps=data_dict['eps'],
                 eps_min=data_dict.get('eps_min', 0), x_L=data_lb, x_U=data_ub)
         else:
             ptb = PerturbationLpNorm(norm=norm, x_L=data_lb, x_U=data_ub)
 
         if data is not None:
+            #print(f"-- abcrown.py; bab; data shape: {data.shape}")
             data = data.to(self.model.device)
             x = BoundedTensor(data, ptb).to(data_lb.device)
+            #print(f"-- abcrown.py; bab; x shape: {x.shape}")
             output = self.model.net(x).flatten()
             print('Model prediction is:', output)
 
@@ -295,6 +306,7 @@ class ABCROWN:
             x = BoundedTensor(data_lb, ptb).to(data_lb.device)
 
         self.domain = torch.stack([data_lb.squeeze(0), data_ub.squeeze(0)], dim=-1)
+        #print(f"-- abcrown.py; bab; self.domain: {self.domain}")
         if arguments.Config['bab']['branching']['input_split']['enable']:
             result = input_bab_parallel(
                 self.model, self.domain, x, rhs=rhs,
@@ -306,6 +318,7 @@ class ABCROWN:
                 return result
         else:
             assert not return_domains, 'return_domains is only for input split for now'
+            #print(f"-- abcrown; bab; x: {x}")
             result = general_bab(
                 self.model, self.domain, x,
                 refined_lower_bounds=lower_bounds, refined_upper_bounds=upper_bounds,
@@ -314,7 +327,7 @@ class ABCROWN:
                 timeout=timeout, max_iterations=max_iterations,
                 refined_betas=refined_betas, rhs=rhs, property_idx=property_idx,
                 model_incomplete=model_incomplete, time_stamp=time_stamp)
-
+        print(f"-- bab result: {result}")
         min_lb = result[0]
         if min_lb is None:
             min_lb = -torch.inf
@@ -383,23 +396,28 @@ class ABCROWN:
             if (arguments.Config['bab']['cut']['enabled'] and
                 arguments.Config['bab']['initial_max_domains'] == 1
                 and not arguments.Config['debug']['sanity_check']):
+                print(f"init_global_lb: {init_global_lb}")
                 if init_global_lb[property_idx][0] > rhs_offset:
                     print('Verified by alpha-CROWN bound!')
                     continue
-
+            #print(f"-- abcrown.py; complete_verifier; properties: {properties}")
             if isinstance(properties[0][0], dict):
-                def _get_item(properties, key):
-                    return torch.concat([
-                        item[key].unsqueeze(0) for item in properties[0]], dim=0)
-                x = _get_item(properties, 'X')
-                data_min = _get_item(properties, 'data_min')
-                data_max = _get_item(properties, 'data_max')
+                #def _get_item(properties, key):
+                #    return torch.concat([ GIVES ERROR -> ADDS A DIMENSION TO 'X'!
+                #        item[key].unsqueeze(0) for item in properties[0]], dim=0)
+                x = properties[0][0].get('X')
+                data_min = properties[0][0].get('data_min').reshape(vnnlib_shape)
+                data_max = properties[0][0].get('data_max').reshape(vnnlib_shape)
+                #print(f"-- abcrown.py; complete_verifier; x shape: {x.shape}")
+                #print(f"-- abcrown.py; complete_verifier; data_min shape: {data_min.shape}")
+                #print(f"-- abcrown.py; complete_verifier; data_max shape: {data_max.shape}")
                 # A dict to store extra variables related to the data and specifications
                 for item in properties[0]:
                     assert item['eps'] == properties[0][0]['eps']
                 data_dict = {
                     'eps': properties[0][0]['eps'],
                     'eps_min': properties[0][0].get('eps_min', 0),
+                    'norm': properties[0][0].get('norm', 1),
                 }
             else:
                 x_range = torch.tensor(properties[0], dtype=torch.get_default_dtype())
@@ -407,6 +425,7 @@ class ABCROWN:
                 data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
                 x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
                 data_dict = None
+            print(f"-- data_dict in complete_verifier function: {data_dict}")
             if 'tightened_input_bounds' in results:
                 assert (
                     results['tightened_input_bounds'][0][property_idx:property_idx+1].shape
@@ -550,6 +569,7 @@ class ABCROWN:
                 if arguments.Config['debug']['sanity_check'] == 'Full':
                     sanity_check_results.append(ret)
                     continue
+                print(f"Returning unknown here!!; ret: {ret}")
                 return 'unknown'
             elif ret != 'safe':
                 raise ValueError(f'Unknown return value of bab: {ret}')
@@ -601,7 +621,10 @@ class ABCROWN:
         else:
             vnnlib = self.vnnlib_all[new_idx]  # vnnlib_all is a list of all standard vnnlib
             # vnnlib contains the data_min and data_max arrays combined for the particular instance
-            #print(f"vnnlib: {vnnlib}")
+        #print(f"-- vnnlib: {vnnlib}")
+        #print(f"-- vnnlib info: type: {type(vnnlib)}; len: {len(vnnlib)}") # type: <class 'list'>; len: 1
+        #print(f"-- vnnlib[0] info: type: {type(vnnlib[0])}; len: {len(vnnlib[0])}") # type: <class 'tuple'>; len: 2
+        #print(f"-- vnnlib[0][0] info: type: {type(vnnlib[0][0])}; len: {len(vnnlib[0][0])}") # type: <class 'list'>; len: 30 (the number of features)
         # Skip running the actual verifier during preparation.
         if arguments.Config['general']['prepare_only']:
             return
@@ -641,6 +664,9 @@ class ABCROWN:
             data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
             x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
         adhoc_tuning(data_min, data_max, self.model_ori)
+        print(f"\n-- x shape: {x.shape}")
+        print(f"-- data_min shape: {data_min.shape}")
+        print(f"-- data_max shape: {data_max.shape}\n")
         rhs_offset_init = arguments.Config['specification']['rhs_offset']
         if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
             vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
@@ -735,7 +761,9 @@ class ABCROWN:
         if (not verified_success
                 and self.complete_verifier_var != 'skip'
                 and verified_status != 'unknown-mip'):
+            #print(f"-- before complete_verifier; vnnlib: {vnnlib}")
             batched_vnnlib = batch_vnnlib(vnnlib)  # [x, [(c, rhs, y, pidx)]] in batch-wise
+            #print(f"-- before complete_verifier; batched_vnnlib: {batched_vnnlib}")
             benchmark_name = (self.file_root.split('/')[-1]
                               if self.debug_args['sanity_check'] is not None else None)
             verified_status = self.complete_verifier(
@@ -769,6 +797,11 @@ class ABCROWN:
         self.logger.record_start_time()
         print(f'\n {"%"*35} num_instance: {self.num_instance} {"%"*35}')
 
+        #for (key, value) in vnnlib[0][0].items():
+        #    print(f"-- vnnlib items: {key}: {value}")
+        #print(f"-- vnnlib mat: {vnnlib[0][1][0][0]}")
+        #print(f"-- vnnlib rhs: {vnnlib[0][1][0][1]}")
+
         # Skip running the actual verifier during preparation.
         if arguments.Config['general']['prepare_only']:
             return
@@ -792,19 +825,20 @@ class ABCROWN:
         # assert len(vnnlib) == 1
         #print(f"vnnlib[0][0]: {vnnlib[0][0]}")
         if isinstance(vnnlib[0][0], dict):
-            #print("went first branch")
+            #print("abcrown; run_one_instance_externally; went first branch here")
             x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
             data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
             data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
         else:
-            #print("went second branch")
+            #print("abcrown; run_one_instance_externally; went second branch here")
             x_range = torch.tensor(vnnlib[0][0])
             data_min = x_range.select(-1, 0).reshape(vnnlib_shape) # Check if this is correct
             data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
             x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
         adhoc_tuning(data_min, data_max, self.model_ori)
-        #print(f"\ndata_min: {data_min}")
-        #print(f"data_max: {data_max}\n")
+        #print(f"\n-- x shape: {x.shape}")
+        #print(f"-- data_min shape: {data_min.shape}")
+        #print(f"-- data_max shape: {data_max.shape}\n")
         rhs_offset_init = arguments.Config['specification']['rhs_offset']
         if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
             vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
@@ -899,7 +933,9 @@ class ABCROWN:
         if (not verified_success
                 and self.complete_verifier_var != 'skip'
                 and verified_status != 'unknown-mip'):
+            #print(f"-- before complete_verifier; vnnlib: {vnnlib}")
             batched_vnnlib = batch_vnnlib(vnnlib)  # [x, [(c, rhs, y, pidx)]] in batch-wise
+            #print(f"-- before complete_verifier; batched_vnnlib: {batched_vnnlib}")
             benchmark_name = (self.file_root.split('/')[-1]
                               if self.debug_args['sanity_check'] is not None else None)
             verified_status = self.complete_verifier(
@@ -962,7 +998,7 @@ class ABCROWN:
             print(f"file_root: {self.file_root}, type: {type(self.file_root)}")
             print(f"example_idx_list: {example_idx_list}, type: {type(example_idx_list)}")
             print(f"model_ori: {self.model_ori}, type: {type(self.model_ori)}")
-            print(f"vnnlib_all: {self.vnnlib_all}, type: {type(self.vnnlib_all)}")
+            #print(f"vnnlib_all: {self.vnnlib_all}, type: {type(self.vnnlib_all)}")
             print(f"shape: {self.shape}, type: {type(self.shape)}")
             print()
 

@@ -7,7 +7,8 @@ import numpy as np
 def load_sample(elsa_comp_path, SHA):
     "Only load from the goodware test dataset"
     sample_path = os.path.join(elsa_comp_path,
-                                "data/test_set_fp_check_features.zip")
+                                #"data/test_set_fp_check_features.zip")
+                                "data/test_set_adv_features.zip")
     with ZipFile(sample_path, "r", ZIP_DEFLATED) as z:
         with z.open(f"{SHA}.json") as f:
             js = json.load(f)
@@ -21,7 +22,7 @@ def load_classification(elsa_comp_path, classifier, SHA):
     #    submission = json.load(f)
     #goodware_submission = submission[0]
     #return goodware_submission[SHA][0]
-    return 0 # FIXME
+    return 1 # FIXME
 
 def load_features(features_path):
     """

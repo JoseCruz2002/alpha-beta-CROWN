@@ -5,6 +5,7 @@ general:
   device: cpu
   save_output: false
   normal_run: false
+  enable_incomplete_verification: true
 model:
   # Model is defined as simple_conv_model() in custom_model_data.py. The function simple_conv_model() will be called with arguments in_channel=3, out_dim=10.
   name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=28, hidden_size=10, layers=2)
@@ -17,13 +18,13 @@ data:
   num_outputs: 2  # Number of classes for classification problem.
 specification:
   # Element-wise perturbation.
-  type: box
+  type: lp
   norm: 1
-  epsilon: 5  # 2./255.
+  #epsilon: 50  # 2./255.
   selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/VarianceFS-04.json
 attack:
   pgd_restarts: 100
-  pgd_order: before
+  pgd_order: skip
   #pgd_alpha: auto  # Step size of PGD attack. Default (auto) is epsilon/4.
   #pgd_alpha_scale: true??  # Scale PGD alpha according to data_max-data_min.
 solver:

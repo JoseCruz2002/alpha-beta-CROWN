@@ -8,17 +8,24 @@ import json
 import os
 import argparse
 import dill as pkl
+import numpy as np
 
 def findCXpDel(distance: int, explanation_problem: ExplanationProblem,
                norm: str, advEx_oracle: BaseOracle):
     F = explanation_problem.classification_problem.feature_set
+    #print(f"F: {len(F)};")
     S: list[str] = F.copy()
     for feature in F:
+        #print(f"\nbeginning S: {len(S)};")
         S.remove(feature)
         F_except_S = list(x for x in F if x not in S)
+        print(f"F_except_S: {len(F_except_S)}")#; {F_except_S}")
         hasAE = advEx_oracle.findAdvEx(distance, F_except_S, explanation_problem, norm)
+        #if True:
         if not hasAE:
             S.append(feature)
+        #print(f"finishing S: {len(S)};")
+        #break
     return S
 
 def main():
@@ -56,7 +63,9 @@ def main():
         classes_set=[0, 1],
         #classifier=opt.classifier
     )
-    classification_problem.fit_vectorizer(load_features(features_data_path))
+    
+    if "FFNN" in opt.classifier:
+        classification_problem.fit_vectorizer(load_features(features_data_path))
 
     explanation_problem = ExplanationProblem(
         classification_problem=classification_problem,
@@ -66,14 +75,13 @@ def main():
     )
     advEx_oracle = abCrown_Oracle(costumization_file_name=opt.config_file_name)
 
-    # FIXME: distance is not affecting nothing here, neither is norm
-    explanation = findCXpDel(2, explanation_problem, "inf", advEx_oracle)
+    explanation = findCXpDel(opt.distance, explanation_problem, 1, advEx_oracle)
     print("############################################################################")
     print(f"explanation size: {len(explanation)}")
     print(f"Saving explanation to: {os.path.join(explanations_path, f'CXp_{opt.classifier}_{opt.distance}_{opt.sampleSHA}.json')}")
-    with open(os.path.join(explanations_path,
-                           f"CXp_{opt.classifier}_{opt.sampleSHA}.json"), "w") as f:
-        json.dump(explanation, f, indent=2)
+    #with open(os.path.join(explanations_path,
+    #                       f"CXp_{opt.classifier}_eps{opt.distance}_{opt.sampleSHA}.json"), "w") as f:
+    #    json.dump(explanation, f, indent=2)
 
 
 if __name__ == "__main__":

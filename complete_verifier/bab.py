@@ -380,7 +380,7 @@ def general_bab(net, domain, x, refined_lower_bounds=None,
     all_label_global_lb = torch.min(global_lb - rhs).item()
     all_label_global_ub = torch.max(global_ub - rhs).item()
 
-    if arguments.Config['debug']['lp_test'] in ['LP', 'MIP']:
+    if arguments.Config['debug']['lp_test'] in ['LP', 'MIP']: # No goes here
         return all_label_global_lb, 0, 'unknown'
 
     if stop_criterion(global_lb).all():
@@ -417,7 +417,7 @@ def general_bab(net, domain, x, refined_lower_bounds=None,
     if cut_enabled and impl_params is None:
         cut_verification(net, domains)
 
-    if bab_args['attack']['enabled']:
+    if bab_args['attack']['enabled']: # No goes here
         return bab_loop_attack(
             domains, net, batch, rhs, start_time, timeout,
             updated_mask, attack_images, all_label_global_ub)
@@ -475,6 +475,7 @@ def general_bab(net, domain, x, refined_lower_bounds=None,
                 stats.all_node_split = False
                 result = 'unsafe_bab'
             else:
+                print("All nodes are split but all_split_result != unsafe")
                 stats.all_node_split = False
                 result = 'unknown'
         elif num_domains > max_domains:
@@ -489,6 +490,7 @@ def general_bab(net, domain, x, refined_lower_bounds=None,
 
     if not result:
         # No domains left and not timed out.
+        print("No domains left and not timed out.")
         result = 'safe'
 
     del domains

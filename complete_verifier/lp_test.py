@@ -32,7 +32,10 @@ def compare_optimized_bounds_against_lp_bounds(
     ):
     check_after_n_iterations = arguments.Config['debug']['test_optimized_bounds_after_n_iterations']
     include_output_constraint = arguments.Config['debug']['include_output_constraint']
-    norm = arguments.Config['specification']['norm']
+    if vnnlib is not None and len(vnnlib) > 0 and len[vnnlib[0]] > 0 and type(vnnlib[0][0]) == dict:
+        norm = vnnlib[0][0]['norm']
+    else:
+        norm = arguments.Config['specification']['norm']
     # Generally, c should be constructed from vnnlib
     assert len(vnnlib) == 1
     vnnlib = vnnlib[0]

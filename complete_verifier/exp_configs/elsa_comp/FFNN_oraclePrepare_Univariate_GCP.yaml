@@ -1,59 +1,62 @@
 # Example for using customized model and data loader.
 # Model and data loader defined in custom_model_data.py
+# python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
 general:
   device: cpu
-  save_output: true
-  enable_incomplete_verification: false
+  save_output: false
+  normal_run: false
+  complete_verifier: bab # with beta-CROWN or GCP-CROWN
+  enable_incomplete_verification: true
 model:
   # Model is defined as simple_conv_model() in custom_model_data.py. The function simple_conv_model() will be called with arguments in_channel=3, out_dim=10.
   name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=500, hidden_size=10, layers=2)
   # Path to model checkpoint.
-  path: models/elsa_comp/FFNN_normal_small_CEL0109__UnivariateFS-k_best-mutual_info_classif-500_classifier.pth
+  path: complete_verifier/models/elsa_comp/FFNN_normal_small_CEL0109__UnivariateFS-k_best-mutual_info_classif-500_classifier.pth
 data:
   start: 0
-  end: 75000 
-  dataset: Customized("custom_model_data", "my_data_loader", fix_features=True)
+  end: 1 
+  dataset: Customized("custom_model_data", "my_data_loader", fix_features=False)
   num_outputs: 2  # Number of classes for classification problem.
 specification:
   # Element-wise perturbation.
-  type: box
+  type: lp
   norm: 1
-  epsilon: 10  # 2./255.
+  epsilon: 1  # 2./255.
+  #rhs_offset: 0.1
   selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/UnivariateFS-k_best-mutual_info_classif-500.json
-  fixed_features_path: ../../../elsa-cybersecurity/track_1/fixed_features/fixed_features_v1.json
 attack:
   pgd_restarts: 100
   pgd_order: skip
   #pgd_alpha: auto  # Step size of PGD attack. Default (auto) is epsilon/4.
   #pgd_alpha_scale: true??  # Scale PGD alpha according to data_max-data_min.
 solver:
-  bound_prop_method: beta-crown
-  init_bound_prop_method: alpha-crown  # Use tighter initial bounds
-
-  alpha-crown:
+  bound_prop_method: alpha-crown
+  init_bound_prop_method: same  # or 'alpha-crown' for stronger initial bounds
+  batch_size: 2048
+  beta-crown:
     iteration: 200
     lr_decay: 0.99
-  beta-crown:
-    iteration: 150
+  alpha-crown:
+    iteration: 300
     lr_decay: 0.99
-    enable_opt_interm_bounds: true
-
-  mip:
-    refine_neuron_timeout: 30
-    refine_neuron_time_percentage: 0.9
-    early_stop: false
-
-  crown:
-    activation_bound_option: adaptive
-
 bab:
   timeout: 600
-  branching:
-    reduceop: max
-    enable_intermediate_bound_opt: true
-
+  interm_transfer: false
+  tree_traversal: breadth_first
   cut:
     enabled: true
     bab_cut: true
-    cplex_cuts: false ## gotta fix this
-    number_cuts: 100
+    number_cuts: 500
+    cplex_cuts: false
+    biccos:
+      enabled: true
+      #auto_param: false
+      multi_tree_branching:
+        enabled: true
+        restore_best_tree: true
+  branching:
+    method: sb
+    input_split:
+      enable: true
+    candidates: 7
+    reduceop: max

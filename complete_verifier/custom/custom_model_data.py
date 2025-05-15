@@ -197,14 +197,16 @@ import numpy as np
 
 def my_data_loader(spec, fix_features=False):
     aux, vectorizer = get_input(spec)
-    X = csr_matrix_to_tensor(aux[:2])
-    labels = torch.tensor(get_labels()[:2])
+    X = csr_matrix_to_tensor(aux[:300])
+    labels = torch.tensor(get_labels()[:300])
 
     if not fix_features:
         data_max = torch.ones(1, X.shape[1])
         data_min = torch.zeros(1, X.shape[1])
         eps = spec["epsilon"]
-        ret_eps = torch.full((1, X.shape[1]), eps) if eps is not None else None
+        #ret_eps = eps #FIXME Simply not working
+        #ret_eps = torch.full((1, X.shape[1]), eps) if eps is not None else None
+        ret_eps=None
     else:
         fixed_features_idxs = get_fixed_features_idxs(spec, vectorizer)
         assert fixed_features_idxs is not None

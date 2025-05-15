@@ -2,6 +2,7 @@ general:
   root_path: ../../vnncomp2024_benchmarks/benchmarks/lsnc
   csv_name: instances.csv
   enable_incomplete_verification: false
+  device: cpu
 attack:
   pgd_order: skip
 solver:
