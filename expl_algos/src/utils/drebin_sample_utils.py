@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 
-def load_sample(elsa_comp_path, SHA):
+def load_sample(elsa_comp_path, classifier, SHA):
     "Only load from the goodware test dataset"
     sample_path = os.path.join(elsa_comp_path,
                                 #"data/test_set_fp_check_features.zip")
@@ -16,13 +16,15 @@ def load_sample(elsa_comp_path, SHA):
 
 
 def load_classification(elsa_comp_path, classifier, SHA):
-    #submission_path = os.path.join(elsa_comp_path,
-    #                            f"track_1/submissions/submission_{classifier}_track_1.json")
-    #with open(submission_path, "r") as f:
-    #    submission = json.load(f)
-    #goodware_submission = submission[0]
-    #return goodware_submission[SHA][0]
-    return 1 # FIXME
+    submission_path = os.path.join(elsa_comp_path,
+                                f"track_1/submissions/submission_{classifier}_track_1.json")
+    with open(submission_path, "r") as f:
+        submission = json.load(f)
+    for test in submission:
+        for (SHA_, [label, _]) in test.items():
+            if SHA_ == SHA:
+                print(f"SHA: {SHA}: label: {label}")
+                return label
 
 def load_features(features_path):
     """

@@ -193,8 +193,16 @@ def process_vnn_lib_attack(vnnlib, x):
     list_target_label_arrays = [[]]
     data_min_repeat = []
     data_max_repeat = []
-
     for vnn in vnnlib:
+        #print(f"-- attack_pgd.py; process_vnn_lib_attack; vnn: {vnn}")
+        if type(vnn[0]) == dict:
+            print("-- WARNING! vnn[0] is dict, transforming it back to sequence.")
+            aux = []
+            for i in range(vnn[0]["data_max"].shape[0]):
+                aux += [(vnn[0]["data_min"][i].item(), vnn[0]["data_max"][i].item())]
+            #vnn = (aux, [(vnn[1][0][0].numpy()), vnn[1][0][1].numpy()])
+            vnn = (aux, vnn[1])
+        #print(f"-- attack_pgd.py; process_vnn_lib_attack; vnn: {vnn}")
         data_range = torch.Tensor(vnn[0])
         spec_num = len(vnn[1])
 
@@ -246,8 +254,12 @@ def attack(model_ori, x, vnnlib, verified_status, verified_success,
             print(f"Remain {len(list_target_label_arrays[0])} labels need to be attacked.")
 
         attack_function = eval(arguments.Config["attack"]["attack_func"])
+        if type(vnnlib[0][0]) == dict:
+            norm_ = vnnlib[0][0]["norm"]
+        else:
+            norm_ = arguments.Config["specification"]["norm"]
         attack_ret, attack_images, attack_margins, all_adv_candidates = attack_function(
-            model_ori, x, data_min_repeat[:, :len(list_target_label_arrays[0]), ...],
+            model_ori, x, norm_, data_min_repeat[:, :len(list_target_label_arrays[0]), ...],
             data_max_repeat[:, :len(list_target_label_arrays[0]), ...], list_target_label_arrays,
             initialization=initialization, GAMA_loss=GAMA_loss)
 
@@ -1204,7 +1216,7 @@ def boundary_attack(model, x, data_min, data_max):
 
 
 
-def attack_with_general_specs(model, x, data_min, data_max,
+def attack_with_general_specs(model, x, norm, data_min, data_max,
                               list_target_label_arrays,
                               initialization="uniform", GAMA_loss=False):
     r""" Interface to PGD attack.

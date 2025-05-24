@@ -1019,7 +1019,8 @@ class ConfigHandler:
         """Adaptively tune arguments."""
 
         if (self["specification"]["norm"] != torch.inf
-            and self["attack"]["pgd_order"] != "skip"):
+                and self["specification"]["norm"] is not None
+                and self["attack"]["pgd_order"] != "skip"):
             print('Only Linf-norm attack is supported, the pgd_order will be changed to skip')
             self["attack"]["pgd_order"] = "skip"
 

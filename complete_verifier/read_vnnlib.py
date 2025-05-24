@@ -161,12 +161,16 @@ def read_vnnlib(vnnlib_filename, regression=False):
         2. For the later loading, it will check *.compiled and see if the stored sha256 matches the original one. If not, regeneration is needed for vnnlib changing cases. Otherwise return the cache file.
     '''
 
-    if arguments.Config["debug"]["rescale_vnnlib_ptb"] is not None:
-        rescale_perturbation = True
-        perturbation_scaler = float(arguments.Config["debug"]["rescale_vnnlib_ptb"])
-        print(f"Warning: scaling vnnlib readings by a scaler {perturbation_scaler}. THIS SHOULD NOT BE ENABLED NORMALLY.")
-        assert not regression
-    else:
+    try:
+        if arguments.Config["debug"]["rescale_vnnlib_ptb"] is not None:
+            rescale_perturbation = True
+            perturbation_scaler = float(arguments.Config["debug"]["rescale_vnnlib_ptb"])
+            print(f"Warning: scaling vnnlib readings by a scaler {perturbation_scaler}. THIS SHOULD NOT BE ENABLED NORMALLY.")
+            assert not regression
+        else:
+            rescale_perturbation = False
+            perturbation_scaler = 1.0
+    except:
         rescale_perturbation = False
         perturbation_scaler = 1.0
 

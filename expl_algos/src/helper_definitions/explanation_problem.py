@@ -6,7 +6,9 @@ class ExplanationProblem():
                  input: list[str], classification: int):
         self._classification_problem = classification_problem
         self._instance = [input, classification]
-        self.transform_input()
+        if "FFNN" in classification_problem.classifier or "drebin" in classification_problem.classifier or\
+           "secsvm" in classification_problem.classifier or "MLP_Sklearn" in classification_problem.classifier:
+            self.transform_input()
         #print(f"instance: {self._instance}")
 
     @property
