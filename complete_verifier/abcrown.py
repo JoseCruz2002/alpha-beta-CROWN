@@ -14,6 +14,7 @@
 #########################################################################
 """α,β-CROWN (alpha-beta-CROWN) verifier main interface."""
 
+import numpy as np
 import copy
 import socket
 import random
@@ -22,7 +23,6 @@ import sys
 import time
 import gc
 import torch
-import numpy as np
 from collections import defaultdict
 
 import arguments

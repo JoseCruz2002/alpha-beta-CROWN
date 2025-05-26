@@ -5,7 +5,8 @@ import numpy as np
 
 class abCrown_Oracle(BaseOracle):
 
-    def __init__(self, costumization_file_name, final_rv, benchmark_year=""):
+    def __init__(self, distance, norm, label, costumization_file_name,
+                 final_rv, benchmark_year=""):
         BaseOracle.__init__(self)
         self.oracle = abCrown_API(costumization_file_name, benchmark_year)
         self.bounds = final_rv[0][0] # benchmark models
@@ -36,8 +37,8 @@ class abCrown_Oracle(BaseOracle):
         #print(f"-- abcrown_oracle; findAdvEx; vnnlib: {vnnlib}")
         verified_status = self.oracle.run_abCrown(input, vnnlib)
         print(f"verified_status by the oracle: {verified_status}")
-        if ("unsafe" in verified_status or "sat" in verified_status or
-                "attack success" in verified_status): #or "unknown" in verified_status):
+        if (verified_status == "unsafe" or verified_status == "sat" or
+                verified_status == "attack success"): #or "unknown" in verified_status):
             return True
         else:
             return False

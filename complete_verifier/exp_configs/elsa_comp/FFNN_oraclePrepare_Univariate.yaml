@@ -19,19 +19,20 @@ data:
   num_outputs: 2  # Number of classes for classification problem.
 specification:
   type: lp
-  norm: ERROR!!
-  epsilon: ERROR!!
+  norm: null
+  epsilon: null
   selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/UnivariateFS-k_best-mutual_info_classif-500.json
 attack:
   pgd_order: skip
 solver:
   batch_size: 2048
   beta-crown:
-    iteration: 20
+    iteration: 50
+    all_node_split_LP: true
 bab:
   #initial_max_domains: 2  # CHECK THIS AFTER BUG CORRECTION
-  timeout: 300
+  timeout: 2000
   branching:
-    method: fsb
+    method: sb
     input_split:
       enable: true

@@ -20,8 +20,8 @@ data:
 specification:
   # Element-wise perturbation.
   type: lp
-  norm: 1
-  epsilon: 1  # 2./255.
+  norm: null
+  epsilon: null  # 2./255.
   #rhs_offset: 0.1
   selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/UnivariateFS-k_best-mutual_info_classif-500.json
 attack:

@@ -19,7 +19,7 @@ data:
 specification:
   # Element-wise perturbation.
   type: lp
-  norm: 1
+  norm: null
   #epsilon: 50  # 2./255.
   selected_features_path: ../../../elsa-cybersecurity/track_1/selected_features/VarianceFS-04.json
 attack:

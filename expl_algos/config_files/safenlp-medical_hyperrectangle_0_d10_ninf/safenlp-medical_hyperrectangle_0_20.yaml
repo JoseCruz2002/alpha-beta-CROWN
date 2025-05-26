@@ -1,0 +1,14 @@
+attack:
+  pgd_order: after
+  pgd_restarts: 10000
+general:
+  complete_verifier: mip
+  device: cpu
+  enable_incomplete_verification: true
+  normal_run: true
+model:
+  onnx_path: models/vnncomp24/safenlp/medical/perturbations_0.onnx
+specification:
+  epsilon: 10
+  norm: .inf
+  vnnlib_path: /home/josecruz/Documents/MEIC/Thesis/alpha-beta-CROWN/expl_algos/src/utils/../../vnnlib_spec_files/safenlp-medical_hyperrectangle_0/safenlp-medical_hyperrectangle_0_20.vnnlib

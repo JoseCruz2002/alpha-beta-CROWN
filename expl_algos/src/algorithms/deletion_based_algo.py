@@ -2,6 +2,7 @@ from expl_algos.src.helper_definitions.explanation_problem import ExplanationPro
 from expl_algos.src.helper_definitions.classification_problem import ClassificationProblem
 from expl_algos.src.advExOracle.base_oracle import BaseOracle
 from expl_algos.src.advExOracle.abcrown_oracle import abCrown_Oracle
+from expl_algos.src.advExOracle.debug_abcrown_oracle import Debug_abCrown_Oracle
 import expl_algos.src.utils.drebin_sample_utils as dsu
 import expl_algos.src.utils.vnn_sample_utils as vsu
 
@@ -42,10 +43,13 @@ def main():
                         help="The name of the feature set file")
     parser.add_argument("-sample", type=str,
                         help="The SHA (id) of the instance to be evaluated")
-    parser.add_argument("-distance", type=int,
+    parser.add_argument("-distance", type=float,
                         help="The distance on which to look for adversarial examples")
     parser.add_argument("-norm", type=str, default=1,
                         help="The norm to use to calculate the distance metrics.")
+    parser.add_argument("-run_oracle_debug_mode", type=bool, default=False,
+                        help="When this is set to true, there will be generated configuration and"+
+                            "vnnlib files specific to each iteration of the deletion based algorithm.")
     opt = parser.parse_args()
     print(f"The parameters passed to the program are:\n\
             config_file_name: {opt.config_file_name}\n\
@@ -54,7 +58,8 @@ def main():
             feat_set_file: {opt.feat_set_file}\n\
             sample: {opt.sample}\n\
             distance: {opt.distance}\n\
-            norm: {opt.norm}")
+            norm: {opt.norm}\n\
+            run_oracle_debug_mode: {opt.run_oracle_debug_mode}")
 
     base_path = os.path.join(os.path.dirname(__file__))
     explanations_path = os.path.join(base_path, "../../explanations")
@@ -69,12 +74,14 @@ def main():
         with open(features_selected_path, "r") as f:
             features_selected = json.load(f)
         final_rv = [[list((0, 1) for _ in range(len(features_selected)))]]
+        distance = int(opt.distance)
     elif opt.benchmark_year == "2024":
         classifier_name = opt.classifier.split('-')[0]
         features_selected_path = os.path.join(benchmarks2024_path, f"{classifier_name}/{opt.feat_set_file}")
         with open(features_selected_path, "r") as f:
             features_selected = json.load(f)
         final_rv = vsu.parse_vnnlib(benchmarks2024_path, opt.classifier, opt.sample)
+        distance = opt.distance
     else:
         raise NotImplementedError  
 
@@ -94,11 +101,20 @@ def main():
         input=loader.load_sample(data_path, opt.classifier, opt.sample),
         classification=loader.load_classification(data_path, opt.classifier, opt.sample)
     )
-    advEx_oracle = abCrown_Oracle(costumization_file_name=opt.config_file_name,
-                                  final_rv=final_rv, benchmark_year=opt.benchmark_year)
-
+    
     norm = np.inf if opt.norm == "inf" else int(opt.norm)
-    explanation = findCXpDel(opt.distance, explanation_problem, norm, advEx_oracle)
+
+    if opt.run_oracle_debug_mode == False:
+        advEx_oracle = abCrown_Oracle(costumization_file_name=opt.config_file_name,
+                                      final_rv=final_rv, benchmark_year=opt.benchmark_year)
+    else:
+        advEx_oracle = Debug_abCrown_Oracle(distance, norm, explanation_problem,
+                                            base_costumization=opt.config_file_name,
+                                            final_rv=final_rv,
+                                            sample_name=opt.sample.split('.')[0],
+                                            benchmark_year=opt.benchmark_year)
+
+    explanation = findCXpDel(distance, explanation_problem, norm, advEx_oracle)
     
     print("############################################################################")
     print(f"explanation size: {len(explanation)}")

@@ -21,3 +21,7 @@ python expl_algos/src/algorithms/deletion_based_algo.py -config_file_name safenl
 # acasxu
 python expl_algos/src/algorithms/deletion_based_algo.py -config_file_name acasxu_oracle.yaml -benchmark_year 2024 -classifier acasxu_2023 -feat_set_file features.json -sample prop_4.vnnlib -distance 1 -norm inf
 ## *************************************** ****************** *************************************** ##
+
+## *************************************** Debug VNNCOMP benchmarks *************************************** ##
+python expl_algos/src/algorithms/deletion_based_algo.py -config_file_name safenlp_oracle.yaml -benchmark_year 2024 -classifier safenlp-medical -feat_set_file features.json -sample hyperrectangle_0.vnnlib -distance 1 -norm inf -run_oracle_debug_mode True
+## *************************************** ************************ *************************************** ##
