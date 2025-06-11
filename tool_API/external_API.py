@@ -1,6 +1,6 @@
 import os
 
-from complete_verifier.abcrown import ABCROWN
+from alpha_beta_CROWN.complete_verifier.abcrown import ABCROWN
 
 class abCrown_API():
 

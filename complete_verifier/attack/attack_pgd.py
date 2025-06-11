@@ -99,7 +99,7 @@ def check_and_save_cex(adv_example, adv_output, vnnlib, res_path, expected_verif
             
     if arguments.Config['general']['show_adv_example']:
         print('Adv example:')
-        print(adv_example[0, 0])
+        print(adv_example)
     print()
     return verified_status, verified_success
 
@@ -200,7 +200,7 @@ def process_vnn_lib_attack(vnnlib, x):
             aux = []
             for i in range(vnn[0]["data_max"].shape[0]):
                 aux += [(vnn[0]["data_min"][i].item(), vnn[0]["data_max"][i].item())]
-            #vnn = (aux, [(vnn[1][0][0].numpy()), vnn[1][0][1].numpy()])
+            #vnn = (aux, [(np.array(vnn[1][0][0], dtype=float), np.array(vnn[1][0][1], dtype=float))])
             vnn = (aux, vnn[1])
         #print(f"-- attack_pgd.py; process_vnn_lib_attack; vnn: {vnn}")
         data_range = torch.Tensor(vnn[0])
@@ -254,12 +254,8 @@ def attack(model_ori, x, vnnlib, verified_status, verified_success,
             print(f"Remain {len(list_target_label_arrays[0])} labels need to be attacked.")
 
         attack_function = eval(arguments.Config["attack"]["attack_func"])
-        if type(vnnlib[0][0]) == dict:
-            norm_ = vnnlib[0][0]["norm"]
-        else:
-            norm_ = arguments.Config["specification"]["norm"]
         attack_ret, attack_images, attack_margins, all_adv_candidates = attack_function(
-            model_ori, x, norm_, data_min_repeat[:, :len(list_target_label_arrays[0]), ...],
+            model_ori, x, data_min_repeat[:, :len(list_target_label_arrays[0]), ...],
             data_max_repeat[:, :len(list_target_label_arrays[0]), ...], list_target_label_arrays,
             initialization=initialization, GAMA_loss=GAMA_loss)
 
@@ -341,15 +337,24 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
     same_number_const (bool): if same_number_const is True, it means that there are same number of and specifications in every or specification group.
     data_max & data_min: [num_example, 1, num_spec, *input_shape]
     '''
+    #print(f"-- attack_pgd.py; test_conditions; input: {input}")
     if same_number_const:
         C_mat = C_mat.view(C_mat.shape[0], 1, len(cond_mat[0]), -1, C_mat.shape[-1])
         # [batch_size, restarts, num_or_spec, num_and_spec, output_dim]
         rhs_mat = rhs_mat.view(rhs_mat.shape[0], 1, len(cond_mat[0]), -1)
-
+        #print(f"-- attack_pgd.py; test_conditions; C_mat: {C_mat}")
+        #print(f"-- attack_pgd.py; test_conditions; rhs_mat: {rhs_mat}")
         # apply a small tolerance to rhs so that we are more confident about the adv example
         cond = torch.matmul(C_mat, output.unsqueeze(-1)).squeeze(-1) - rhs_mat + arguments.Config["attack"]["attack_tolerance"]
+        #print(f"-- attack_pgd.py; test_conditions; cond: {cond}")
 
         valid = ((input <= data_max) & (input >= data_min))
+        #print(f"-- attack_pgd.py; test_conditions; valid: {valid}")
+        # Acertain that the adversarial examples found only have binary features when specified
+        if arguments.Config["attack"]["check_binary_features"]:
+            tolerance = 0.05  # Small value to allow for floating point error
+            valid = ((input <= data_max) & (input >= data_min) &
+                     torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))
 
         valid = valid.reshape(*valid.shape[:3], -1)
         # [num_example, restarts, num_all_spec, output_dim]
@@ -357,7 +362,7 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         # [num_example, restarts, num_or_spec, num_and_spec]
 
         res = ((cond.amax(dim=-1, keepdim=True) < 0.0) & valid).any(dim=-1).any(dim=-1).any(dim=-1)
-
+        #print(f"-- attack_pgd.py; test_conditions; res: {res}")
         if res.all() and return_success_idx:
             # invalid examples will not be selected by torch.min, shape: [num_example, restarts, num_all_spec, output_dim]
             vio_value = cond.amax(dim=-1, keepdim=True) * valid
@@ -416,6 +421,7 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         return res, float('nan')
 
     return res
+    #return torch.logical_not(res)
 
 
 def default_early_stop_condition(inputs, output, C_mat, rhs_mat, cond_mat, same_number_const,
@@ -1216,7 +1222,7 @@ def boundary_attack(model, x, data_min, data_max):
 
 
 
-def attack_with_general_specs(model, x, norm, data_min, data_max,
+def attack_with_general_specs(model, x, data_min, data_max,
                               list_target_label_arrays,
                               initialization="uniform", GAMA_loss=False):
     r""" Interface to PGD attack.
@@ -1243,6 +1249,7 @@ def attack_with_general_specs(model, x, norm, data_min, data_max,
 
         GAMA_loss (boolean): whether to use GAMA (Guided adversarial attack) loss in PGD attack
     """
+    #print(f"-- attack_pgd.py; attack_with_general_specs; list_target_label_arrays: {list_target_label_arrays}")
     attack_start_time = time.time()
     assert arguments.Config["specification"]["norm"] == np.inf, print('We only support Linf-norm attack.')
     use_adam = True
@@ -1278,7 +1285,10 @@ def attack_with_general_specs(model, x, norm, data_min, data_max,
     print('Model output of first 5 examples:\n', output[:5])
 
     C_mat, rhs_mat, cond_mat, same_number_const = build_conditions(x, list_target_label_arrays)
-
+    #print(f"-- attack_pgd.py; attack_with_general_specs; C_mat: {C_mat}")
+    #print(f"-- attack_pgd.py; attack_with_general_specs; rhs_mat: {rhs_mat}")
+    #print(f"-- attack_pgd.py; attack_with_general_specs; cond_mat: {cond_mat}")
+    #print(f"-- attack_pgd.py; attack_with_general_specs; same_number_const: {same_number_const}")
     output = output.unsqueeze(1).unsqueeze(1).repeat(1, 1, len(cond_mat[0]), 1)
 
     if test_conditions(x, output, C_mat, rhs_mat, cond_mat, same_number_const,

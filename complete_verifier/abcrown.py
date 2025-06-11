@@ -150,7 +150,7 @@ class ABCROWN:
             norm = arguments.Config['specification']['norm']
             # Perturbation value for non-Linf perturbations, None for all other cases.
             ptb = PerturbationLpNorm(norm=norm, x_L=data_lb, x_U=data_ub)
-        print(f"-- abcrown; incomplete_verifier - ptb: {ptb}")
+        #print(f"-- abcrown; incomplete_verifier - ptb: {ptb}")
         x = BoundedTensor(data, ptb).to(data.device)
         output = model.net(x)
         print_model(model.net)
@@ -819,7 +819,7 @@ class ABCROWN:
         timeout_threshold = self.bab_args['timeout']
         self.logger.update_timeout(timeout_threshold)
         self.model_ori.eval()
-        vnnlib_shape = [-1, instance.shape[1]]
+        vnnlib_shape = arguments.Config['model']['input_shape']
         attack_image = None
         # FIXME attack and initial_incomplete_verification only works for
         # assert len(vnnlib) == 1

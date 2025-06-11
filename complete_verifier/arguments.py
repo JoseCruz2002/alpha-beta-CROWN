@@ -943,6 +943,9 @@ class ConfigHandler:
         self.add_argument('--check_clean', action='store_true',
                           help='Check clean prediction before attack.',
                           hierarchy=h + ["check_clean"])
+        self.add_argument('--check_binary_features', action='store_true',
+                          help='The adversarial examples to be valid must only have binary variables.',
+                          hierarchy=h + ["check_binary_features"])
 
         h = ["attack", "input_split"]
         self.add_argument('--input_split_pgd_steps', type=int, default=100,

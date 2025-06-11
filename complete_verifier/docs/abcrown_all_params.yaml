@@ -273,6 +273,7 @@ attack:
   gama_lambda: 10.0  # Regularization parameter in GAMA attack.
   gama_decay: 0.9  # Decay of regularization parameter in GAMA attack.
   check_clean: false  # Check clean prediction before attack.
+  check_binary_features: false # The adversarial examples to be valid must only have binary variables.
   input_split:
     pgd_steps: 100  # Steps of PGD attack in input split before branching starts.
     pgd_restarts: 30  # Number of random PGD restarts in input split before branching starts.

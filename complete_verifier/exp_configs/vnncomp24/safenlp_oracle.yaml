@@ -2,14 +2,13 @@
 general:
   complete_verifier: mip
   device: cpu
-  normal_run: false
   enable_incomplete_verification: true
+  normal_run: false
 model:
-  onnx_path: complete_verifier/models/vnncomp24/safenlp/medical/perturbations_0.onnx
+  onnx_path: ../alpha_beta_CROWN/complete_verifier/models/vnncomp24/safenlp/medical/perturbations_0.onnx
 specification:
-  type: box
+  type: lp
   norm: .inf
-  epsilon: null
 attack:
-  pgd_order: after
+  pgd_order: skip
   pgd_restarts: 10000

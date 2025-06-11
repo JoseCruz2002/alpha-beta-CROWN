@@ -13,7 +13,7 @@
 ##                                                                     ##
 #########################################################################
 import torch
-from complete_verifier.attack.attack_pgd import default_adv_verifier
+from attack.attack_pgd import default_adv_verifier # Fixed the import
 
 
 def customized_gtrsb_adv_verifier(attack_image, attack_output, vnnlib, check_output):

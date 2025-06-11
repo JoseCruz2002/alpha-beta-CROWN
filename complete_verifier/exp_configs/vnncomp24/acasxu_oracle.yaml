@@ -1,0 +1,26 @@
+# Configuration file for running the ACASXu benchmark (all properties).
+general:
+  device: cpu
+  enable_incomplete_verification: False
+  normal_run: false
+model:
+  onnx_path: ../alpha_beta_CROWN/complete_verifier/models/vnncomp24/acasxu/ACASXU_run2a_5_3_batch_2000.onnx
+specification:
+  type: lp
+  norm: .inf
+data:
+  num_outputs: 5
+solver:
+  batch_size: 16384  # Number of parallel domains to compute on GPU.
+  bound_prop_method: crown
+bab:
+  branching:
+    method: naive  # Split on input space.
+    input_split:
+      enable: True
+      enable_clip_domains: True
+      reorder_bab: True
+attack:
+  pgd_order: skip
+  pgd_restarts: 10000
+  pgd_restart_when_stuck: True
