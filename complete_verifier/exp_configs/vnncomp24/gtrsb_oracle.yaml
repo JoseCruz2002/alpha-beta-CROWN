@@ -31,8 +31,8 @@ solver:
     iteration: 20
     lr_beta: 0.03
   mip:
-    parallel_solvers: 8
-    solver_threads: 4
+    parallel_solvers: 4
+    solver_threads: 2
     refine_neuron_time_percentage: 0.8
     skip_unsafe: True
 bab:

@@ -13,6 +13,9 @@ data:
 solver:
   batch_size: 16384  # Number of parallel domains to compute on GPU.
   bound_prop_method: crown
+  mip:
+    parallel_solvers: 4
+    solver_threads: 2
 bab:
   branching:
     method: naive  # Split on input space.
@@ -21,6 +24,6 @@ bab:
       enable_clip_domains: True
       reorder_bab: True
 attack:
-  pgd_order: skip
+  pgd_order: after
   pgd_restarts: 10000
   pgd_restart_when_stuck: True

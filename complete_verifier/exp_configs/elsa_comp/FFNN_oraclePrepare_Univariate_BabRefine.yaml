@@ -26,6 +26,9 @@ solver:
   batch_size: 2048
   beta-crown:
     iteration: 50
+  mip:
+    parallel_solvers: 4
+    solver_threads: 2
 bab:
   #initial_max_domains: 2  # CHECK THIS AFTER BUG CORRECTION
   timeout: 2000
