@@ -2,7 +2,7 @@
 # Model and data loader defined in custom_model_data.py
 # python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
 general:
-  device: cpu
+  device: cuda:3
   save_output: false
   normal_run: false
   complete_verifier: bab
@@ -33,7 +33,7 @@ solver:
     solver_threads: 2
 bab:
   #initial_max_domains: 2  # CHECK THIS AFTER BUG CORRECTION
-  timeout: 2000
+  timeout: 600
   branching:
     method: sb
     input_split:

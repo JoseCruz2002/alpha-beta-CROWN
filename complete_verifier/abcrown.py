@@ -793,6 +793,7 @@ class ABCROWN:
         Returns:
             verified_status: The result of the verifier.
         """
+        print(vnnlib)
         arguments.Globals['example_idx'] = 0
         self.logger.record_start_time()
         print(f'\n {"%"*35} num_instance: {self.num_instance} {"%"*35}')
