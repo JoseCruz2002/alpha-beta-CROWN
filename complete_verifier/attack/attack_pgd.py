@@ -399,6 +399,11 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         cond = group_C.matmul(cond.unsqueeze(-1)).squeeze(-1)
 
         valid = ((input <= data_max) & (input >= data_min))
+        if arguments.Config["attack"]["check_binary_features"]:
+            tolerance = 0.05  # Small value to allow for floating point error
+            valid = ((input <= data_max) & (input >= data_min) &
+                     torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))
+
         valid = valid.view(*valid.shape[:3], -1)
         # [num_example, restarts, num_all_spec, output_dim]
         valid = valid.all(-1).view(valid.shape[0], valid.shape[1], len(cond_mat[0]), -1)

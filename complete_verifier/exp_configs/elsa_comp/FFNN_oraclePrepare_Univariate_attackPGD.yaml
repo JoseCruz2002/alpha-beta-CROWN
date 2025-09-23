@@ -2,7 +2,7 @@
 # Model and data loader defined in custom_model_data.py
 # python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
 general:
-  device: cuda:3
+  device: cuda
   save_output: false
   normal_run: false
   complete_verifier: bab

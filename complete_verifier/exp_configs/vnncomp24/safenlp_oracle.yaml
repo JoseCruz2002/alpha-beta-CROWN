@@ -1,11 +1,12 @@
 # Configuration file for running the safeNLP benchmark (all properties).
 general:
   complete_verifier: mip
-  device: cpu
+  device: cuda
   enable_incomplete_verification: true
   normal_run: false
 model:
   onnx_path: ../alpha_beta_CROWN/complete_verifier/models/vnncomp24/safenlp/medical/perturbations_0.onnx
+  input_shape: [-1, 30]
 specification:
   type: lp
   norm: .inf
