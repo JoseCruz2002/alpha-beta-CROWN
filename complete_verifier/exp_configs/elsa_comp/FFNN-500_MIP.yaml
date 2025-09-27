@@ -21,7 +21,7 @@ data:
 specification:
   type: lp
 attack:
-  pgd_order: skip #before
+  pgd_order: after #before
   enable_mip_attack: true
   check_clean: true
   check_binary_features: true
