@@ -10,7 +10,7 @@ model:
   onnx_optimization_flags: fix_gtrsb
   onnx_vnnlib_joint_optimization_flags: ["peel_off_last_softmax_layer"]
   check_optimized: True
-  input_shape: [-1, 3, 30, 30]
+  input_shape: [-1, 30, 30, 3]
 specification:
   type: lp
   norm: .inf
@@ -41,3 +41,4 @@ bab:
     reduceop: max
     nonlinear_split:
       disable: true
+  timeout: 1000

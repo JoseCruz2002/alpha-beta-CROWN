@@ -2,18 +2,18 @@
 # Model and data loader defined in custom_model_data.py
 # python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
 general:
-  device: cpu 
+  device: cpu
   save_output: false
   normal_run: false
-  complete_verifier: bab # change to mip?
-  enable_incomplete_verification: false
+  complete_verifier: bab
+  enable_incomplete_verification: true
   show_adv_example: true
 model:
   # Model is defined as simple_conv_model() in custom_model_data.py. The function simple_conv_model() will be called with arguments in_channel=3, out_dim=10.
-  name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=500, hidden_size=10, layers=2)
+  name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=10000, hidden_size=10, layers=2)
   # Path to model checkpoint.
-  path: ../alpha_beta_CROWN/complete_verifier/models/elsa_comp/FFNN_normal_small_CEL0109__UnivariateFS-k_best-mutual_info_classif-500_classifier.pth
-  input_shape: [-1, 500]
+  path: ../alpha_beta_CROWN/complete_verifier/models/elsa_comp/FFNN_normal_small_CEL0109__UnivariateFS-k_best-mutual_info_classif-10000_classifier.pth
+  input_shape: [-1, 10000]
 data:  
   #start: 0
   #end: 1 

@@ -5,7 +5,7 @@ general:
   complete_verifier: mip
   normal_run: false
 model:
-  onnx_path: ../alpha_beta_CROWN/complete_verifier/models/vnncomp24/mnist/mnist-3x50.onnx
+  onnx_path: ../alpha_beta_CROWN/complete_verifier/models/vnncomp24/mnist/MNISTmodel_asVT7.onnx
   input_shape: [-1, 1, 28, 28]  # This onnx model has input shape [-1, 784] which is not compatible with our MIP solution
 specification:
   type: lp

@@ -15,5 +15,5 @@ solver:
     parallel_solvers: 4
     solver_threads: 2
 attack:
-  pgd_order: skip
+  pgd_order: after
   pgd_restarts: 10000

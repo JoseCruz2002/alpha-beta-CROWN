@@ -425,7 +425,7 @@ class ABCROWN:
                 data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
                 x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
                 data_dict = None
-            print(f"-- data_dict in complete_verifier function: {data_dict}")
+            #print(f"-- data_dict in complete_verifier function: {data_dict}")
             if 'tightened_input_bounds' in results:
                 assert (
                     results['tightened_input_bounds'][0][property_idx:property_idx+1].shape
@@ -653,20 +653,20 @@ class ABCROWN:
         # FIXME attack and initial_incomplete_verification only works for
         # assert len(vnnlib) == 1
         if isinstance(vnnlib[0][0], dict):
-            print("went first branch")
+            #print("went first branch")
             x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
             data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
             data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
         else:
-            print("went second branch")
+            #print("went second branch")
             x_range = torch.tensor(vnnlib[0][0])
             data_min = x_range.select(-1, 0).reshape(vnnlib_shape)
             data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
             x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
         adhoc_tuning(data_min, data_max, self.model_ori)
-        print(f"\n-- x shape: {x.shape}")
-        print(f"-- data_min shape: {data_min.shape}")
-        print(f"-- data_max shape: {data_max.shape}\n")
+        #print(f"\n-- x shape: {x.shape}")
+        #print(f"-- data_min shape: {data_min.shape}")
+        #print(f"-- data_max shape: {data_max.shape}\n")
         rhs_offset_init = arguments.Config['specification']['rhs_offset']
         if rhs_offset_init is not None and not arguments.Config['debug']['sanity_check']:
             vnnlib = add_rhs_offset(vnnlib, rhs_offset_init)
@@ -793,7 +793,7 @@ class ABCROWN:
         Returns:
             verified_status: The result of the verifier.
         """
-        print(vnnlib)
+        #print(f"-- abcrown; run_one_instance_externally; vnnlib: {vnnlib}")
         arguments.Globals['example_idx'] = 0
         self.logger.record_start_time()
         print(f'\n {"%"*35} num_instance: {self.num_instance} {"%"*35}')
@@ -827,7 +827,7 @@ class ABCROWN:
         #print(f"vnnlib[0][0]: {vnnlib[0][0]}")
         if isinstance(vnnlib[0][0], dict):
             #print("abcrown; run_one_instance_externally; went first branch here")
-            x = vnnlib[0][0]['X'].reshape(vnnlib_shape)
+            vnnlib[0][0]['X'] = x = torch.reshape(vnnlib[0][0]['X'], vnnlib_shape)
             data_min = vnnlib[0][0]['data_min'].reshape(vnnlib_shape)
             data_max = vnnlib[0][0]['data_max'].reshape(vnnlib_shape)
         else:

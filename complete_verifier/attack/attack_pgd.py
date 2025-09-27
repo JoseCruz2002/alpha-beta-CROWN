@@ -66,6 +66,12 @@ def check_and_save_cex(adv_example, adv_output, vnnlib, res_path, expected_verif
     verified_status = expected_verified_status
     verified_success = True
 
+    #if arguments.Config['attack']['check_binary_features']:
+    #    adv_example = adv_example.flatten()
+    #    tol = 1e-05
+    #    assert (torch.all(torch.isclose(adv_example, 0, atol=tol) |
+    #                      torch.isclose(adv_example, 1, atol=tol)))
+
     if arguments.Config['general']['save_adv_example']:
         if eval(arguments.Config['attack']['adv_verifier'])(adv_example, adv_output, vnnlib, 
                                                             arguments.Config['general']['verify_onnxruntime_output']):
@@ -450,6 +456,7 @@ def build_conditions(x, list_target_label_arrays):
     const_num = None
     for i in range(batch_size):
         target_label_arrays = list_target_label_arrays[i]
+        #print(f"-- attack_pgd; build_conditions; target_label_arrays: {target_label_arrays}")
         for prop_mat, prop_rhs in target_label_arrays:
             C_mat[i].append(torch.Tensor(prop_mat).to(x.device))
             rhs_mat[i].append(torch.Tensor(prop_rhs).to(x.device))
@@ -708,7 +715,10 @@ def pgd_attack_with_general_specs(model, X, data_min, data_max, C_mat, rhs_mat,
     early_stopped = False
 
     for iteration in range(attack_iters):
+        #print(f"-- attack_pgd; pgd_attack_with_general_specs; X.shape: {X.shape}")
         inputs = normalize(X + delta)
+        #print(f"-- attack_pgd; pgd_attack_with_general_specs; inputs: {inputs}")
+        #print(f"-- attack_pgd; pgd_attack_with_general_specs; inputs.shape: {inputs.shape}")
         output = model(inputs.view(-1, *input_shape[1:])).view(
             input_shape[0], *extra_dim, num_classes)
 
