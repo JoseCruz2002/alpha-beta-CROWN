@@ -14,6 +14,7 @@
 #########################################################################
 import torch
 from attack.attack_pgd import default_adv_verifier # Fixed the import
+import arguments
 
 
 def customized_gtrsb_adv_verifier(attack_image, attack_output, vnnlib, check_output):
@@ -25,3 +26,10 @@ def customized_gtrsb_adv_verifier(attack_image, attack_output, vnnlib, check_out
         # reversing format transform in custom_gtrsb_loader to adjust to permuted attack_image
         vnnlib[0] = (torch.tensor(vnnlib[0][0]).reshape(*ori_shape[1:], 2).permute(1, 2, 0, 3).reshape(-1, 2).tolist(), vnnlib[0][1])
     return default_adv_verifier(attack_image, attack_output, vnnlib, check_output)
+
+def binary_features_adv_verifier(attack_image, attack_output, vnnlib, check_output):
+    # Verify if all entries in the attack_image are 0s and 1s
+    assert arguments.Config["attack"]["check_binary_features"]
+    tolerance = 0.01  # Small value to allow for floating point error
+    return (torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))\
+           and default_adv_verifier(attack_image, attack_output, vnnlib, check_output)

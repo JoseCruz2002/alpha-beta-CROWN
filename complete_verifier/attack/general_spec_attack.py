@@ -345,7 +345,12 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         # apply a small tolerance to rhs so that we are more confident about the adv example
         cond = torch.matmul(C_mat, output.unsqueeze(-1)).squeeze(-1) - rhs_mat + arguments.Config["attack"]["attack_tolerance"]
 
-        valid = ((input <= data_max) & (input >= data_min))
+        if arguments.Config["attack"]["check_binary_features"]:
+            tolerance = 0.01  # Small value to allow for floating point error
+            valid = ((input <= data_max) & (input >= data_min) &
+                     torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))
+        else:
+            valid = ((input <= data_max) & (input >= data_min))
 
         valid = valid.reshape(*valid.shape[:3], -1)
         # [num_example, restarts, num_all_spec, output_dim]
@@ -389,7 +394,12 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         # loss shape: [batch_size, num_restarts, num_total_spec]
         cond = group_C.matmul(cond.unsqueeze(-1)).squeeze(-1)
 
-        valid = ((input <= data_max) & (input >= data_min))
+        if arguments.Config["attack"]["check_binary_features"]:
+            tolerance = 0.01  # Small value to allow for floating point error
+            valid = ((input <= data_max) & (input >= data_min) &
+                     torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))
+        else:
+            valid = ((input <= data_max) & (input >= data_min))
         valid = valid.view(*valid.shape[:3], -1)
         # [num_example, restarts, num_all_spec, output_dim]
         valid = valid.all(-1).view(valid.shape[0], valid.shape[1], len(cond_mat[0]), -1)

@@ -209,7 +209,7 @@ class ABCROWN:
 
         ret.update({'model': model, 'global_lb': global_lb, 'alpha': saved_alphas})
 
-        if tighten_input_bounds:
+        if tighten_input_bounds: # False
             perturbed_root = None
             for root in model.net.roots():
                 if hasattr(root, 'perturbation') and root.perturbation is not None:
