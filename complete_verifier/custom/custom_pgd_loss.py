@@ -59,3 +59,16 @@ def customized_gtrsb_loss(origin_out, output, C_mat, rhs_mat, cond_mat, same_num
 
     return loss, loss_gama
 
+def binary_pgd_loss(origin_out, output, C_mat, rhs_mat, cond_mat, same_number_const,
+               gama_lambda=0, threshold=-1e-5, mode='hinge', model=None, adex_candidates=[]):
+    loss, loss_gama = default_pgd_loss(origin_out, output, C_mat, rhs_mat, cond_mat, same_number_const,
+               gama_lambda, threshold, mode)
+    #print(f"-- custon_pgd_loss; binary_pgd_loss; loss: {loss.shape}")
+    # I want to decrease the loss based on how far an adex_candidate is from being in the binary domain
+    #print(f"-- custon_pgd_loss; binary_pgd_loss; adex_candidates: {adex_candidates.shape}")
+    penalty = torch.min(adex_candidates, 1 - adex_candidates).abs()
+    #print(f"-- custon_pgd_loss; binary_pgd_loss; penalty: {penalty.shape}")
+    loss -= torch.mean(penalty, dim=-1, keepdim=True)
+    return loss, loss_gama
+
+ 

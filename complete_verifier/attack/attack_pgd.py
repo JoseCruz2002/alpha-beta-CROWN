@@ -731,11 +731,22 @@ def pgd_attack_with_general_specs(model, X, data_min, data_max, C_mat, rhs_mat,
         else:
             origin_out = None
 
-        loss, loss_gama = eval(arguments.Config["attack"]["pgd_loss"])(
-            origin_out, output, C_mat, rhs_mat,
-            cond_mat, same_number_const,
-            gama_lambda if GAMA_loss else 0.0,
-            mode=arguments.Config['attack']['pgd_loss_mode'], model=model)
+        if "binary_pgd_loss" in arguments.Config["attack"]["pgd_loss"]:
+            # I do this if-then-else because I want the adex candidates as well to
+            # compute the loss
+            assert arguments.Config["attack"]["check_binary_features"]
+            loss, loss_gama = eval(arguments.Config["attack"]["pgd_loss"])(
+                origin_out, output, C_mat, rhs_mat,
+                cond_mat, same_number_const,
+                gama_lambda if GAMA_loss else 0.0,
+                mode=arguments.Config['attack']['pgd_loss_mode'], model=model,
+                adex_candidates=inputs)
+        else:
+            loss, loss_gama = eval(arguments.Config["attack"]["pgd_loss"])(
+                origin_out, output, C_mat, rhs_mat,
+                cond_mat, same_number_const,
+                gama_lambda if GAMA_loss else 0.0,
+                mode=arguments.Config['attack']['pgd_loss_mode'], model=model)
         gama_lambda *= arguments.Config["attack"]["gama_decay"]
         # shape of loss: [num_example, num_restarts, num_or_spec]
         # or float when gama_lambda > 0

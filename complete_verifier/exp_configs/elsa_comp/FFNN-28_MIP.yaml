@@ -28,6 +28,7 @@ attack:
   check_clean: true
   check_binary_features: true
   adv_verifier: Customized("custom_adv_verifier", "binary_features_adv_verifier")
+  pgd_loss: Customized("custom_pgd_loss", "binary_pgd_loss") 
   input_split_check_adv:
     enabled: auto
 solver:
