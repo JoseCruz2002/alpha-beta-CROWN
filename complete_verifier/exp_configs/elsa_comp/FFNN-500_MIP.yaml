@@ -22,6 +22,8 @@ specification:
   type: lp
 attack:
   pgd_order: after #before
+  #pgd_alpha: 1 Not worth it
+  #pgd_alpha_scale: true Not worth it
   enable_mip_attack: true
   check_clean: true
   check_binary_features: true
@@ -45,4 +47,4 @@ bab:
   branching:
     method: sb
     input_split:
-      enable: true
+      enable: false

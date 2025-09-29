@@ -142,6 +142,11 @@ def make_input_box_dict(num_inputs):
 
     return rv
 
+def make_binary_input(num_inputs, binary_feats_exist_idxs):
+    'create a list that holds the input value'
+    input_value = np.zeros(num_inputs)
+    input_value[binary_feats_exist_idxs] = 1.0
+    return input_value
 
 def read_vnnlib(vnnlib_filename, regression=False):
     '''process in a vnnlib file
@@ -161,44 +166,43 @@ def read_vnnlib(vnnlib_filename, regression=False):
         2. For the later loading, it will check *.compiled and see if the stored sha256 matches the original one. If not, regeneration is needed for vnnlib changing cases. Otherwise return the cache file.
     '''
 
-    try:
-        if arguments.Config["debug"]["rescale_vnnlib_ptb"] is not None:
-            rescale_perturbation = True
-            perturbation_scaler = float(arguments.Config["debug"]["rescale_vnnlib_ptb"])
-            print(f"Warning: scaling vnnlib readings by a scaler {perturbation_scaler}. THIS SHOULD NOT BE ENABLED NORMALLY.")
-            assert not regression
-        else:
-            rescale_perturbation = False
-            perturbation_scaler = 1.0
-    except:
+    if arguments.Config["debug"]["rescale_vnnlib_ptb"] is not None:
+        rescale_perturbation = True
+        perturbation_scaler = float(arguments.Config["debug"]["rescale_vnnlib_ptb"])
+        print(f"Warning: scaling vnnlib readings by a scaler {perturbation_scaler}. THIS SHOULD NOT BE ENABLED NORMALLY.")
+        assert not regression
+    else:
         rescale_perturbation = False
         perturbation_scaler = 1.0
 
 
-    if not rescale_perturbation:
-        # Save python object for parsed vnnlib files. Cache them in ".compiled files.
-        compiled_vnnlib_suffix = ".compiled"
-        compiled_vnnlib_filename = vnnlib_filename + compiled_vnnlib_suffix
-        with open(vnnlib_filename, "rb") as file:
-            curfile_sha256 = hashlib.sha256(file.read()).hexdigest()
-        if (os.path.exists(compiled_vnnlib_filename)):
-            read_error = False
-            try:
-                with open(compiled_vnnlib_filename, "rb") as extf:
-                    final_rv, old_file_sha256 = pickle.load(extf)
-            except (pickle.PickleError, ValueError, EOFError):
-                print("Cannot read compiled vnnlib file. Regenerating...")
-                read_error = True
-            
-            if (read_error == False):
-                if (curfile_sha256 == old_file_sha256):
-                    print(f"Precompiled vnnlib file found at {compiled_vnnlib_filename}")
-                    return final_rv
-                else:
-                    print(f"{compiled_vnnlib_suffix} file sha256: {curfile_sha256} does not match the current vnnlib sha256: {old_file_sha256}. Regenerating...")
+    #if not rescale_perturbation:
+    #    # Save python object for parsed vnnlib files. Cache them in ".compiled files.
+    #    compiled_vnnlib_suffix = ".compiled"
+    #    compiled_vnnlib_filename = vnnlib_filename + compiled_vnnlib_suffix
+    #    with open(vnnlib_filename, "rb") as file:
+    #        curfile_sha256 = hashlib.sha256(file.read()).hexdigest()
+    #    if (os.path.exists(compiled_vnnlib_filename)):
+    #        read_error = False
+    #        try:
+    #            with open(compiled_vnnlib_filename, "rb") as extf:
+    #                final_rv, old_file_sha256 = pickle.load(extf)
+    #        except (pickle.PickleError, ValueError, EOFError):
+    #            print("Cannot read compiled vnnlib file. Regenerating...")
+    #            read_error = True
+    #        
+    #        if (read_error == False):
+    #            if (curfile_sha256 == old_file_sha256):
+    #                print(f"Precompiled vnnlib file found at {compiled_vnnlib_filename}")
+    #                return final_rv
+    #            else:
+    #                print(f"{compiled_vnnlib_suffix} file sha256: {curfile_sha256} does not match the current vnnlib sha256: {old_file_sha256}. Regenerating...")
 
     # example: "(declare-const X_0 Real)"
     regex_declare = re.compile(r"^\(declare-const (X|Y)_(\S+) Real\)$")
+
+    # example "(binary_feat_exists X_0)"
+    regex_binary_feat_exists = re.compile(r"\(binary_feat_exists X_(\S+)\)")
 
     # comparison sub-expression
     # example: "(<= Y_0 Y_1)" or "(<= Y_0 10.5)"
@@ -237,6 +241,19 @@ def read_vnnlib(vnnlib_filename, regression=False):
                 raise ValueError(f'Unknown declaration: {line}')
     print(f'{num_inputs} inputs and {num_outputs} outputs in vnnlib')
 
+    binary_feats_exist = []
+    for line in lines:
+        bin_feat = regex_binary_feat_exists.findall(line)
+        if len(bin_feat) == 0:
+            continue
+        elif len(bin_feat) > 1:
+            raise ValueError(f"There cannot be more than one indication of binary feature existence in one line: {line}")
+        else:
+            bin_feat = int(bin_feat[0])
+            binary_feats_exist += [bin_feat]
+    print(f'Number of binary features that exist: {len(binary_feats_exist)}')
+    print(f'The binary features present in the input: {binary_feats_exist}')
+
     rv = []  # list of 3-tuples, (box-dict, mat, rhs)
     rv.append((make_input_box_dict(num_inputs), [], []))
 
@@ -245,7 +262,8 @@ def read_vnnlib(vnnlib_filename, regression=False):
         assert len(lines) == 3
 
     for line in lines:
-        if len(regex_declare.findall(line)) > 0:
+        if len(regex_declare.findall(line)) > 0 or\
+                len(regex_binary_feat_exists.findall(line)) > 0:
             continue
 
         groups = regex_simple_assert.findall(line)
@@ -314,7 +332,7 @@ def read_vnnlib(vnnlib_filename, regression=False):
 
     # finalize objects (convert dicts to lists and lists to np.array)
     final_rv = []
-
+    i = 0
     for rv_tuple in merged_rv.values():
         box_dict = rv_tuple[0]
 
@@ -340,9 +358,13 @@ def read_vnnlib(vnnlib_filename, regression=False):
             # final_spec.append(mat)
             # final_rhs.append(rhs)
 
-        final_rv.append((box, spec_list))
+        if len(binary_feats_exist) > 0: 
+            final_rv.append((box, spec_list, make_binary_input(num_inputs, binary_feats_exist)))
+        else:
+            final_rv.append((box, spec_list))
 
-    if not rescale_perturbation:
-        with open(compiled_vnnlib_filename, "wb") as extf:
-            pickle.dump((final_rv, curfile_sha256), extf, protocol=pickle.HIGHEST_PROTOCOL)
+    #print(final_rv)
+    #if not rescale_perturbation:
+    #    with open(compiled_vnnlib_filename, "wb") as extf:
+    #        pickle.dump((final_rv, curfile_sha256), extf, protocol=pickle.HIGHEST_PROTOCOL)
     return final_rv

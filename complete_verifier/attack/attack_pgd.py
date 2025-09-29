@@ -66,11 +66,11 @@ def check_and_save_cex(adv_example, adv_output, vnnlib, res_path, expected_verif
     verified_status = expected_verified_status
     verified_success = True
 
-    #if arguments.Config['attack']['check_binary_features']:
-    #    adv_example = adv_example.flatten()
-    #    tol = 1e-05
-    #    assert (torch.all(torch.isclose(adv_example, 0, atol=tol) |
-    #                      torch.isclose(adv_example, 1, atol=tol)))
+    if arguments.Config['attack']['check_binary_features']:
+        if not eval(arguments.Config['attack']['adv_verifier'])(adv_example, adv_output, vnnlib, 
+                                                            arguments.Config['general']['verify_onnxruntime_output']):
+            verified_status = 'unknown'
+            verified_success = False
 
     if arguments.Config['general']['save_adv_example']:
         if eval(arguments.Config['attack']['adv_verifier'])(adv_example, adv_output, vnnlib, 
@@ -357,7 +357,7 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         #print(f"-- attack_pgd.py; test_conditions; valid: {valid}")
         # Acertain that the adversarial examples found only have binary features when specified
         if arguments.Config["attack"]["check_binary_features"]:
-            tolerance = 0.01  # Small value to allow for floating point error
+            tolerance = 0.001  # Small value to allow for floating point error
             valid = ((input <= data_max) & (input >= data_min) &
                      torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))
         else:
@@ -406,7 +406,7 @@ def test_conditions(input, output, C_mat, rhs_mat, cond_mat, same_number_const, 
         cond = group_C.matmul(cond.unsqueeze(-1)).squeeze(-1)
 
         if arguments.Config["attack"]["check_binary_features"]:
-            tolerance = 0.01  # Small value to allow for floating point error
+            tolerance = 0.001  # Small value to allow for floating point error
             valid = ((input <= data_max) & (input >= data_min) &
                      torch.logical_or((input - 0.0).abs() < tolerance, (input - 1.0).abs() < tolerance))
         else:
@@ -1742,35 +1742,36 @@ def is_onnx_equal_to_pytorch_output(onnx_path, onnx_attack_image, pytorch_y, rel
 def is_specification_vio(box_spec_list, x_list, expected_y, tol):
     """Check that the spec file was obeyed"""
     rv = False
-    
-    for i, box_spec in enumerate(box_spec_list):
-        input_box, spec_list = box_spec
-        assert len(input_box) == len(x_list), f"input box len: {len(input_box)}, x_in len: {len(x_list)}"
 
-        input_box_tensor = torch.tensor(input_box, dtype=x_list.dtype, device=x_list.device)
-        lb_tensor, ub_tensor = input_box_tensor[:, 0], input_box_tensor[:, 1]
-        
-        # Check if x_list is inside the input box using tensor operations
-        inside_input_box = torch.all((x_list >= lb_tensor - tol) & (x_list <= ub_tensor + tol))
+    if not isinstance(box_spec_list[0][0], dict):
+        for i, box_spec in enumerate(box_spec_list):
+            input_box, spec_list = box_spec
+            assert len(input_box) == len(x_list), f"input box len: {len(input_box)}, x_in len: {len(x_list)}"
 
-        if inside_input_box:
-            # Check spec
-            violated = False
-                
-            for j, (prop_mat, prop_rhs) in enumerate(spec_list):
-                prop_mat_tensor = torch.tensor(prop_mat, dtype=expected_y.dtype, device=expected_y.device)
-                prop_rhs_tensor = torch.tensor(prop_rhs, dtype=expected_y.dtype, device=expected_y.device)
-                
-                vec = torch.matmul(prop_mat_tensor, expected_y)
-                sat = torch.all(vec <= prop_rhs_tensor + tol)
+            input_box_tensor = torch.tensor(input_box, dtype=x_list.dtype, device=x_list.device)
+            lb_tensor, ub_tensor = input_box_tensor[:, 0], input_box_tensor[:, 1]
 
-                if sat:
-                    violated = True
+            # Check if x_list is inside the input box using tensor operations
+            inside_input_box = torch.all((x_list >= lb_tensor - tol) & (x_list <= ub_tensor + tol))
+
+            if inside_input_box:
+                # Check spec
+                violated = False
+
+                for j, (prop_mat, prop_rhs) in enumerate(spec_list):
+                    prop_mat_tensor = torch.tensor(prop_mat, dtype=expected_y.dtype, device=expected_y.device)
+                    prop_rhs_tensor = torch.tensor(prop_rhs, dtype=expected_y.dtype, device=expected_y.device)
+
+                    vec = torch.matmul(prop_mat_tensor, expected_y)
+                    sat = torch.all(vec <= prop_rhs_tensor + tol)
+
+                    if sat:
+                        violated = True
+                        break
+
+                if violated:
+                    rv = True
                     break
-
-            if violated:
-                rv = True
-                break
     
     if rv:
         print('Succeed in specification conditions check.')

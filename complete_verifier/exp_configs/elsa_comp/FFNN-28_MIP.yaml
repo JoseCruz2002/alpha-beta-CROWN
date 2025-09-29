@@ -10,10 +10,10 @@ general:
   show_adv_example: true
 model:
   # Model is defined as simple_conv_model() in custom_model_data.py. The function simple_conv_model() will be called with arguments in_channel=3, out_dim=10.
-  name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=10000, hidden_size=10, layers=2)
+  name: Customized("custom_specs_model", "feedForwardNN", n_classes=2, n_features=28, hidden_size=10, layers=2)
   # Path to model checkpoint.
-  path: ../alpha_beta_CROWN/complete_verifier/models/elsa_comp/FFNN_normal_small_CEL0109__UnivariateFS-k_best-mutual_info_classif-10000_classifier.pth
-  input_shape: [-1, 10000]
+  path: ../alpha_beta_CROWN/complete_verifier/models/elsa_comp/FFNN_normal_small_CEL0109__VarianceFS-04_classifier.pth
+  input_shape: [-1, 28]
 data:  
   #start: 0
   #end: 1 
@@ -25,7 +25,6 @@ attack:
   #pgd_alpha: 1 Not worth it
   #pgd_alpha_scale: true Not worth it
   enable_mip_attack: true
-  pgd_restart_when_stuck: true
   check_clean: true
   check_binary_features: true
   adv_verifier: Customized("custom_adv_verifier", "binary_features_adv_verifier")

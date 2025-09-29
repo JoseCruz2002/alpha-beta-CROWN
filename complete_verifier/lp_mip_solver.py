@@ -139,6 +139,12 @@ def mip(model, ret_incomplete, labels_to_verify=None, mip_skip_unsafe=False, vnn
                         attack_output = model.model_ori(mip_adv.view(-1, *model.x.shape[1:]))
                         verified_status, _ = check_and_save_cex(mip_adv, attack_output, vnnlib,
                                                                 arguments.Config["attack"]["cex_path"], "unsafe-mip")
+                        if arguments.Config["attack"]["check_binary_features"] and verified_status == "unknown":
+                            continue # allow to keep searching for a binary adversarial example
+                    # if check_binary_features is true, then an adversarial example must always exist so that binarity can be enforced.
+                    elif arguments.Config["attack"]["check_binary_features"]:
+                        verified_status = "unknown-mip"
+                        continue # keep searching for adversarial examples
                     return verified_status, ret
             # Lower bound < 0 and upper bound > 0, must be a timeout.
             assert mip_status[pidx] == 9 or mip_status[pidx] == -1, "should only be timeout for label pidx"

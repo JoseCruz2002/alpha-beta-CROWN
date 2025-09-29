@@ -73,7 +73,11 @@ class ABCROWN:
     ):
         # Generally, c should be constructed from vnnlib
         assert len(vnnlib) == 1, 'incomplete_verifier only support single x spec'
-        input_x, specs = vnnlib[0]
+        if arguments.Config["general"]["normal_run"] and\
+                arguments.Config["attack"]["check_binary_features"]:
+            input_x, specs, x = vnnlib[0]
+        else:    
+            input_x, specs = vnnlib[0]
         #print(f"-- input_x type: {type(input_x)}; len: {len(input_x)}")
         #print(f"-- specs type: {type(specs)}; len: {len(specs)}; {specs}")
         c_transposed = False
@@ -176,7 +180,6 @@ class ABCROWN:
             rhs = rhs.t()
         
         print(f"-- global_lb: {global_lb}")
-        print(f"-- rhs: {rhs}")
         
         if torch.any((global_lb - rhs) > 0, dim=-1).all():
             # Any spec in AND verified means verified. Also check all() at batch dim.
@@ -488,7 +491,7 @@ class ABCROWN:
             time_stamp += 1
             input_split = arguments.Config['bab']['branching']['input_split']['enable']
             init_failure_idx = np.array([])
-            if enable_incomplete and not input_split:
+            if enable_incomplete and not input_split: # This is the if branch my FFNN-x_MIP configurations follow
                 if len(init_global_lb) > 1:  # if batch == 1, there is no need to filter here.
                     # Reuse results from incomplete results, or from refined MIPs.
                     # skip the prop that already verified
@@ -662,7 +665,10 @@ class ABCROWN:
             x_range = torch.tensor(vnnlib[0][0])
             data_min = x_range.select(-1, 0).reshape(vnnlib_shape)
             data_max = x_range.select(-1, 1).reshape(vnnlib_shape)
-            x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
+            if arguments.Config['attack']['check_binary_features']:
+                x = torch.tensor(vnnlib[0][2], dtype=torch.get_default_dtype()).reshape(vnnlib_shape)
+            else:    
+                x = x_range.mean(-1).reshape(vnnlib_shape)  # only the shape of x is important.
         adhoc_tuning(data_min, data_max, self.model_ori)
         #print(f"\n-- x shape: {x.shape}")
         #print(f"-- data_min shape: {data_min.shape}")
