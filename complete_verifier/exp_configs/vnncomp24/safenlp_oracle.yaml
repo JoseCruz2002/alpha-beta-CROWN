@@ -1,7 +1,7 @@
 # Configuration file for running the safeNLP benchmark (all properties).
 general:
   complete_verifier: mip
-  device: cuda
+  device: cpu
   enable_incomplete_verification: true
   normal_run: false
 model:
@@ -12,8 +12,8 @@ specification:
   norm: .inf
 solver:
   mip:
-    parallel_solvers: 4
-    solver_threads: 2
+    parallel_solvers: 1
+    solver_threads: 4
 attack:
   pgd_order: after
   pgd_restarts: 10000

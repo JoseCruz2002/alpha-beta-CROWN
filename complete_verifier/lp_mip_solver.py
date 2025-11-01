@@ -634,7 +634,10 @@ def build_solver_model(
     ### Merge the current params to a new solver model build function
     # Initialize the model
     if m.net.solver_pkg == 'gurobi':
-        m.net.solver_model = grb.Model()
+        global gurobi_env
+        gurobi_env = grb.Env(empty=True)
+        gurobi_env.start()
+        m.net.solver_model = grb.Model(env=gurobi_env)
     elif m.net.solver_pkg == 'scip':
         m.net.solver_model = SCIPModel()
     else:
@@ -1259,11 +1262,24 @@ def build_the_model_mip(m, labels_to_verify=None, save_mps=False, process_dict=N
         candidates = [(name, adv, input_names, mip_skip_unsafe) for name, adv in zip(candidates, adv_list)]
     else:
         candidates = [(name, None, input_names, mip_skip_unsafe) for name in candidates]
-
-    with multiprocessing.Pool(mip_multi_proc) as pool:
-        solver_result = pool.starmap(mip_solver_lb_ub, candidates, chunksize=1)
+    
+    print("-- lp_mip_solver; build_the_model_mip; Just before the multiprocessing")
+    if mip_multi_proc == 1:
+        print("NO FORKING!")
+        solver_result = []
+        for candidate in candidates:
+            name, adv, input_names, mip_skip_unsafe = candidate
+            solver_result.append(mip_solver_lb_ub(name, adv, input_names, mip_skip_unsafe))
+    else:    
+        with multiprocessing.Pool(mip_multi_proc) as pool:
+            solver_result = pool.starmap(mip_solver_lb_ub, candidates, chunksize=1)
     # solver_result = mip_solver_lb_ub(*candidates[0])
+    print("-- lp_mip_solver; build_the_model_mip; Right after the multiprocessing")
 
+    multiprocess_mip_model.dispose()
+    if m.net.solver_pkg == 'gurobi':
+        gurobi_env.dispose() # gurobi_env should allways exist here unless not using gurobi (using scip instead)
+        time.sleep(0.5)
     multiprocess_mip_model = None
     stop_multiprocess = False
 

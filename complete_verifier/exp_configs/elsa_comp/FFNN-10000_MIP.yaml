@@ -2,7 +2,7 @@
 # Model and data loader defined in custom_model_data.py
 # python abcrown.py --config exp_configs/tutorial_examples/custom_cifar_data_example.yaml
 general:
-  device: cuda 
+  device: cpu 
   save_output: false
   normal_run: false
   complete_verifier: mip # change to mip?
@@ -39,8 +39,8 @@ solver:
     # Maybe put this back to true ??? (probably is to slow)
     #all_node_split_LP: true
   mip:
-    parallel_solvers: 4
-    solver_threads: 2
+    parallel_solvers: 1
+    solver_threads: 4
     # To look into
     adv_warmup: true # I am checking if the adv example is binary so I think I can put this to true
     extra_constraint: true

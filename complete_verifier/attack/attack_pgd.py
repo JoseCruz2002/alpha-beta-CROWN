@@ -1335,7 +1335,7 @@ def attack_with_general_specs(model, x, data_min, data_max,
     batch_size = arguments.Config["attack"]["pgd_batch_size"]
     best_deltas = None
     best_loss = None
-    for _ in tqdm(range((num_restarts + batch_size - 1) // batch_size)):
+    for _ in range((num_restarts + batch_size - 1) // batch_size):
         best_deltas_, last_deltas, best_loss_, early_stopped = pgd_attack_with_general_specs(
             model, x, data_min, data_max, C_mat, rhs_mat, cond_mat, same_number_const, alpha,
             initialization=initialization, GAMA_loss=GAMA_loss,
